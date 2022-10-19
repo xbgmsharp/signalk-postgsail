@@ -1,5 +1,5 @@
 # Signal K PostgSail plugin
-PostgSail effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything.  Built for sailors, motorboats and commercial uses.
+PostgSail effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything. Built for sailors, motorboats and commercial uses.
 
 ## Description
 Signal K server plugin to send all self SignalK numeric data and nagigation entry to an PostgSail server.
