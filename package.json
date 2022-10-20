@@ -1,0 +1,27 @@
+{
+  "name": "signalk-postgsail",
+  "version": "0.0.5",
+  "description": "Automatically log your sails and remotely monitor your boat",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-category-utility"
+  ],
+  "author": "Francois Lacroix <xbgmsharp@gmail.com>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "axios": "^0.27.2",
+    "sqlite3": "^5.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xbgmsharp/signalk-postgsail.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xbgmsharp/signalk-postgsail/issues"
+  },
+  "homepage": "https://github.com/xbgmsharp/signalk-postgsail#readme"
+}
