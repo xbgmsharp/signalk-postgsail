@@ -1,7 +1,7 @@
 /*
  * Copyright 2019-2021 Ilker Temir <ilker@ilkertemir.com>
  * Copyright 2021-2022 Francois Lacroix <xbgmsharp@gmail.com>
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,16 +19,21 @@ const SUBMIT_INTERVAL = 10         // Submit to API every N minutes Prod
 //const SUBMIT_INTERVAL = 3         // Submit to API every N minutes Dev
 const SEND_METADATA_INTERVAL = 1   // Submit to API every N hours
 const MIN_DISTANCE = 0.50          // Update database if moved X miles
-const DB_UPDATE_MINUTES = 2       // Update database every N minutes (worst case)
+//const DB_UPDATE_MINUTES = 2       // Update database every N minutes (worst case) Dev
+const DB_UPDATE_MINUTES = 5       // Update database every N minutes (worst case) Prod
 const DB_UPDATE_MINUTES_MOVING = 1 // Update database every N minutes while moving
 const SPEED_THRESHOLD = 1          // Speed threshold for moving (knots)
 const MINIMUM_TURN_DEGREES = 25    // Update database if turned more than N degrees
-//const BUFFER_LIMIT = 61           // Submit POST only X entries at a time.
+const BUFFER_LIMIT = 31           // Submit only X buffer entries at a time Prod
+//const BUFFER_LIMIT = 2           // Submit only X buffer entries at a time Dev
 
-const fs = require('fs');
+//const fs = require('fs');
 const filePath = require('path');
 const axios = require('axios');
 const sqlite3 = require('sqlite3');
+const zlib = require('zlib');
+const moment = require('moment');
+const https = require('https');
 const mypackage = require('./package.json');
 
 module.exports = function(app) {
@@ -88,11 +93,12 @@ module.exports = function(app) {
 
     API = axios.create({
       baseURL: host,
-      timeout: 5000,
+      timeout: 20000,
       headers: {
         'Authorization': `Bearer ${token}`,
         'User-Agent': `postgsail.signalk v${metadata.plugin_version}`
-       }
+       },
+       httpsAgent: new https.Agent({KeepAlive: true})
     });
     sendMetadata();
 
@@ -181,7 +187,7 @@ module.exports = function(app) {
     metadata.time = new Date().toISOString();
     app.debug(`DEBUG: metadata: ${metadata.toString()}`);
     API.post('/metadata', metadata,
-        { 
+        {
           headers: {
             'Prefer': 'return=headers-only'
           }
@@ -198,7 +204,22 @@ module.exports = function(app) {
     })
     .catch(function (error) {
       app.debug('Metadata submission to the server failed');
-      //console.log(error);
+      console.log('signalk-postgsail - Metadata submission to the server failed');
+      if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.log(error.response);
+          console.log('signalk-postgsail - Error the server responded with non 2xx a status code');
+      } else if (error.request) {
+          // The request was made but no response was received
+          // `error.request` is an instance of http.ClientRequest in node.js
+          //console.log(error.request);
+          console.log('signalk-postgsail - Error no response was received');
+      } else {
+          // Something happened in setting up the request that triggered an Error
+          console.log('signalk-postgsail - Error', error.message);
+      }
+      //console.log('signalk-postgsail - Error', error.config);
     });
   }
 
@@ -223,9 +244,9 @@ module.exports = function(app) {
 
   function submitDataToServer() {
     app.debug('submitDataToServer');
-    // Limit to 61 entries for slow connection, 1 entry/row a minutes submit every 10min
+    // Limit the numbers of entries for slow connection, 1 entry/row a minutes submit every 10min
     // and reduce memory usage
-    db.all('SELECT * FROM buffer ORDER BY time LIMIT 61', function(err, data) {
+    db.all(`SELECT * FROM buffer ORDER BY time LIMIT ${BUFFER_LIMIT}`, function(err, data) {
     //db.all('SELECT * FROM buffer ORDER BY time LIMIT 2', function(err, data) {
     //db.all('SELECT * FROM buffer ORDER BY time', function(err, data) {
       if (!data || data.length == 0) {
@@ -239,17 +260,19 @@ module.exports = function(app) {
         data[i].metrics = JSON.parse(data[i].metrics);
       }
       app.debug('DEBUG: metrics lastTime:' + data[data.length-1].time);
-      /* * 
+      /* *
       * TODO ADD compression GZIP
       * https://www.geeksforgeeks.org/node-js-zlib-gzipsync-method/
       * https://www.stedi.com/docs/edi-core/compression
       * */
       API.post('/metrics?select=time', data,
-        { 
+      //API.post('/metrics?select=time', zlib.gzipSync(data),
+        {
           headers: {
             'Prefer': 'return=representation',
             'Content-Type': 'application/json'
-            // 'content-type': 'application/gzip',
+            //'content-type': 'application/gzip',
+            //'accept-encoding': 'gzip'
           }
         }
       )
@@ -259,9 +282,10 @@ module.exports = function(app) {
           app.debug(response.data);
           let lastTs = null;
           if (response.data.length > 0) {
-            // response exclude timezone and trim 0
-            lastTs = new Date(response.data[response.data.length-1].time).toISOString()
+            // response exclude timezone and trim 0 and it is UTC.
             //lastTs = response.data[response.data.length-1].time+'Z';
+            //lastTs = new Date(response.data[response.data.length-1].time).toISOString();
+            lastTs = moment.utc(response.data[response.data.length-1].time).toISOString();
             app.debug(`Response metrics lastTime <=${lastTs}`);
           }
           if (response.data.length != data.length) {
@@ -285,6 +309,7 @@ module.exports = function(app) {
                 }, 19*1000); // In 8 seconds
               } else {
                 app.debug(`No operations runned on metrics from buffer: ${this.changes}`);
+                console.log('signalk-postgsail - warning removing metrics from buffer');
               }
             }
           });
@@ -293,7 +318,22 @@ module.exports = function(app) {
       })
       .catch(function (error) {
         app.debug(`Connection to the server failed, retry in ${SUBMIT_INTERVAL} min`);
-        //console.log(error);
+        console.log(`signalk-postgsail - connection to the server failed, retry in ${SUBMIT_INTERVAL} min`);
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.log(error.response);
+          console.log('signalk-postgsail - Error the server responded with non 2xx a status code');
+        } else if (error.request) {
+            // The request was made but no response was received
+            // `error.request` is an instance of http.ClientRequest in node.js
+            //console.log(error.request);
+            console.log('signalk-postgsail - Error no response was received');
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.log('signalk-postgsail - Error', error.message);
+        }
+        //console.log('signalk-postgsail - Error', error.config);
       });
 
     });
