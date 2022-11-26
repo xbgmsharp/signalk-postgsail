@@ -186,10 +186,10 @@ module.exports = function(app) {
     // Update metadata time
     metadata.time = new Date().toISOString();
     app.debug(`DEBUG: metadata: ${metadata.toString()}`);
-    API.post('/metadata', metadata,
+    API.post('/metadata?on_conflict=client_id', metadata,
         {
           headers: {
-            'Prefer': 'return=headers-only'
+            'Prefer': 'return=headers-only,resolution=merge-duplicates'
           }
         }
     )
@@ -260,6 +260,7 @@ module.exports = function(app) {
         data[i].metrics = JSON.parse(data[i].metrics);
       }
       app.debug('DEBUG: metrics lastTime:' + data[data.length-1].time);
+      //console.log(`signalk-postgsail - metrics sending ${data.length} row(s), lastTime:` + data[data.length-1].time);
       /* *
       * TODO ADD compression GZIP
       * https://www.geeksforgeeks.org/node-js-zlib-gzipsync-method/
@@ -621,7 +622,7 @@ module.exports = function(app) {
         } else if ( isNaN(value) || !isfloatField(value) || !isFinite(value) ) {
           app.debug(`Skipping path '${path}' because value is invalid, '${value}'`);
         } else {
-          app.debug(`Add to metrics path: '${path}'`); 
+          //app.debug(`Add to metrics path: '${path}'`);
           metrics[path] = value;
         }
     }
