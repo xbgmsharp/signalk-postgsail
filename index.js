@@ -15,8 +15,8 @@
  */
 
 const POLL_INTERVAL = 15            // Poll every N seconds
-const SUBMIT_INTERVAL = 10         // Submit to API every N minutes Prod
-//const SUBMIT_INTERVAL = 3         // Submit to API every N minutes Dev
+//const SUBMIT_INTERVAL = 10         // Submit to API every N minutes Prod
+const SUBMIT_INTERVAL = 3         // Submit to API every N minutes Dev
 const SEND_METADATA_INTERVAL = 1   // Submit to API every N hours
 const MIN_DISTANCE = 0.50          // Update database if moved X miles
 //const DB_UPDATE_MINUTES = 2       // Update database every N minutes (worst case) Dev
@@ -41,6 +41,7 @@ module.exports = function(app) {
   var unsubscribes = [];
   var submitProcess;
   var sendMetadataProcess;
+  var sendDataProcessAsync;
   var statusProcess;
   var db;
   var API;
@@ -93,7 +94,7 @@ module.exports = function(app) {
 
     API = axios.create({
       baseURL: host,
-      timeout: 20000,
+      timeout: 40000,
       headers: {
         'Authorization': `Bearer ${token}`,
         'User-Agent': `postgsail.signalk v${metadata.plugin_version}`
@@ -157,7 +158,7 @@ module.exports = function(app) {
   plugin.stop =  function() {
     clearInterval(sendMetadataProcess);
     clearInterval(submitProcess);
-    //clearInterval(monitoringProcess);
+    clearInterval(sendDataProcessAsync);
     clearInterval(statusProcess);
     db.close(); // Bug save settings
   };
@@ -251,6 +252,10 @@ module.exports = function(app) {
     //db.all('SELECT * FROM buffer ORDER BY time', function(err, data) {
       if (!data || data.length == 0) {
         app.debug('Nothing to send to the server, skipping');
+        if (sendDataProcessAsync) {
+          clearTimeout(sendDataProcessAsync);
+          console.log(`sendDataProcessAsync Timeout ID ${sendDataProcessAsync} has been cleared`);
+        }
         return
       }
       app.debug(`DEBUG: metrics sending ${data.length} row(s)`);
@@ -304,10 +309,14 @@ module.exports = function(app) {
                 app.debug(`Deleted metrics from buffer, req:${data.length}, got:${this.changes}`);
                 // Wait and send new metrics data
                 app.debug('Successfully deleted metrics from buffer, will continue sending metrics to the server');
-                setTimeout(function(){
-                  app.debug('SubmitDataToServer, submitting next metrics batch');
-                  submitDataToServer();
-                }, 19*1000); // In 8 seconds
+                if (sendDataProcessAsync) {
+                  app.debug('Existing sendDataProcessAsync timeout, ignoring');
+                } else {
+                  sendDataProcessAsync = setTimeout(function(){
+                    app.debug('setTimeout, SubmitDataToServer, submitting next metrics batch');
+                    submitDataToServer();
+                  }, 19*1000); // In 8 seconds
+                }
               } else {
                 app.debug(`No operations runned on metrics from buffer: ${this.changes}`);
                 console.log('signalk-postgsail - warning removing metrics from buffer');
@@ -522,7 +531,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status == 'moored') {
+              if (status != "sailing" || status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -534,7 +543,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status == 'moored') {
+              if (status != "sailing" || status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -547,7 +556,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status == 'moored') {
+              if (status != "sailing" || status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -604,8 +613,10 @@ module.exports = function(app) {
       */
       case 'navigation.state':
         // Wait for a valid status before sending data ?
-        app.debug(`Save: ${path} with value ${value}`);
-        status = value;
+        if (path) {
+          app.debug(`Save: ${path} with value ${value}`);
+          status = value;
+        }
         break;
       case 'navigation.altitude':
         app.debug(`Add to metrics path: '${path}'`);
