@@ -20,7 +20,7 @@ Signal K server plugin to send all self SignalK numeric data and nagivation entr
 - Offline mode
 - Low Bandwith mode
 
-## Dependencies
+## Optional dependencies
 [signalk-autostate](https://www.npmjs.com/package/@meri-imperiumi/signalk-autostate) by @meri-imperiumi. Used to determine the vessel's state based on sensor values, and updates the `navigation.state` value accordingly.
 
 ## Cloud
