@@ -293,6 +293,7 @@ module.exports = function(app) {
             app.debug(`Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`);
             lastTs = data[data.length-1].time;
           }
+          app.debug(`Successfully sent ${data.length} record(s) to the server`);
           app.debug(`Removing from buffer <=${lastTs}`);
           db.run('DELETE FROM buffer where time <= ?', lastTs, function cb(err) {
             if(err) {
@@ -303,6 +304,7 @@ module.exports = function(app) {
                 app.debug(`Deleted metrics from buffer, req:${data.length}, got:${this.changes}`);
                 // Wait and send new metrics data
                 app.debug('Successfully deleted metrics from buffer, will continue sending metrics to the server');
+                lastSuccessfulUpdate = Date.now();
                 // Avoid conflict between setInterval data process and SetTimeout data process??
                 setTimeout(function(){
                   app.debug('setTimeout, SubmitDataToServer, submitting next metrics batch');
