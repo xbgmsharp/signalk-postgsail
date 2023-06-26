@@ -52,16 +52,16 @@ module.exports = function(app) {
 
   var updateLastCalled = Date.now();
   var lastSuccessfulUpdate;
-  var position;
+  var position = null;
   var speedOverGround;
   var courseOverGroundTrue;
   var windSpeedApparent = 0;
-  var angleSpeedApparent;
+  var angleSpeedApparent = 0;
   var previousSpeeds = [];
   var previousCOGs = [];
 
   var metadata = {
-    name: app.getSelfPath('name') || 'unknow',
+    name: app.getSelfPath('name'),
     mmsi: app.getSelfPath('mmsi'),
     // urn:mrn:signalk:uuid:
     client_id: 'vessels.urn:mrn:imo:mmsi:'+ app.getSelfPath('mmsi') || 'vessels.'+app.selfId,
@@ -158,7 +158,9 @@ module.exports = function(app) {
     clearInterval(sendMetadataProcess);
     clearInterval(submitProcess);
     clearInterval(statusProcess);
-    db.close(); // Bug save settings
+    if (db) {
+      db.close();
+    }
   };
 
   plugin.schema = {
@@ -185,7 +187,7 @@ module.exports = function(app) {
     // Update metadata time
     metadata.time = new Date().toISOString();
     app.debug(`DEBUG: metadata: ${metadata.toString()}`);
-    API.post('/metadata?on_conflict=client_id', metadata,
+    API.post('/metadata?on_conflict=vessel_id', metadata,
         {
           headers: {
             'Prefer': 'return=headers-only,resolution=merge-duplicates'
