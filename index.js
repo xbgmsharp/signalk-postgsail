@@ -61,14 +61,13 @@ module.exports = function(app) {
   var previousCOGs = [];
 
   var metadata = {
-    name: app.getSelfPath('name'),
-    mmsi: app.getSelfPath('mmsi'),
-    // urn:mrn:signalk:uuid:
-    client_id: 'vessels.urn:mrn:imo:mmsi:'+ app.getSelfPath('mmsi') || 'vessels.'+app.selfId,
-    length: app.getSelfPath('design.length.value.overall'),
-    beam: app.getSelfPath('design.beam.value'),
-    height: app.getSelfPath('design.airHeight.value'),
-    ship_type: app.getSelfPath('design.aisShipType.value.id'),
+    name: app.getSelfPath('name') ? app.getSelfPath('name') : null,
+    mmsi: app.getSelfPath('mmsi') ? app.getSelfPath('mmsi') : null,
+    client_id: app.selfContext,
+    length: app.getSelfPath('design.length.value.overall') ? app.getSelfPath('design.length.value.overall') : null,
+    beam: app.getSelfPath('design.beam.value') ? app.getSelfPath('design.beam.value') : null,
+    height: app.getSelfPath('design.airHeight.value') ? app.getSelfPath('design.airHeight.value') : null,
+    ship_type: app.getSelfPath('design.aisShipType.value.id') ? app.getSelfPath('design.aisShipType.value.id') : null,
     plugin_version: mypackage.version,
     signalk_version: app.config.version,
     time: new Date().toISOString()
@@ -76,7 +75,7 @@ module.exports = function(app) {
 
   plugin.id = "signalk-postgsail";
   plugin.name = "SignalK PostgSail";
-  plugin.description = "PostgSail plugin for Signal K";
+  plugin.description = "PostgSail plugin for Signal K. Automatic logbook and observability.";
 
   plugin.start = function(options) {
 
@@ -93,7 +92,7 @@ module.exports = function(app) {
 
     API = axios.create({
       baseURL: host,
-      timeout: 40000,
+      timeout: 50000,
       headers: {
         'Authorization': `Bearer ${token}`,
         'User-Agent': `postgsail.signalk v${metadata.plugin_version}`
@@ -149,6 +148,16 @@ module.exports = function(app) {
         } else {
           message += ` no successful connection to the server since restart.`;
         }
+        // If status is null, check for autostate plugin?
+        app.debug('statusProcess status', status);
+        if (status == null) {
+          let autostate = app.getSelfPath('navigation.state');
+          app.debug('autostate', autostate);
+          if (typeof autostate !== "object") {
+            app.debug('No navigation.state path, please install signalk-autostate.');
+            app.setPluginError('No navigation.state path, please install signalk-autostate.');
+          }
+        }
         app.setPluginStatus(message);
       })
     }, 31*1000);
@@ -169,7 +178,7 @@ module.exports = function(app) {
     properties: {
       host: {
         type: "string",
-        title: "Host (Optional - default to cloud PostgSail https://iot.openplotter.cloud/)",
+        title: "Host (Optional - only if you use your own self hosted PostgSail instance)",
         default: "https://api.openplotter.cloud/"
       },
       token: {
@@ -186,7 +195,7 @@ module.exports = function(app) {
   function sendMetadata() {
     // Update metadata time
     metadata.time = new Date().toISOString();
-    app.debug(`DEBUG: metadata: ${metadata.toString()}`);
+    app.debug('DEBUG: metadata:', metadata);
     API.post('/metadata?on_conflict=vessel_id', metadata,
         {
           headers: {
@@ -210,7 +219,7 @@ module.exports = function(app) {
           // The request was made and the server responded with a status code
           // that falls out of the range of 2xx
           console.log(error.response);
-          console.log('signalk-postgsail - Error the server responded with non 2xx a status code');
+          console.log('signalk-postgsail - Error the server responded with a non 2xx status code');
       } else if (error.request) {
           // The request was made but no response was received
           // `error.request` is an instance of http.ClientRequest in node.js
@@ -231,6 +240,19 @@ module.exports = function(app) {
 
     if ((!position) || (!position.changedOn)) {
       return
+    }
+
+    if (position == null) {
+      // This is odd, let's debug
+      let data = app.getSelfPath('navigation.position');
+      if (!data) {
+        app.debug('No navigation.position for self.');
+        return;
+      }
+      let now = new Date();
+      let dataTs = new Date(data.timestamp);
+      app.debug(`No position data, not recording information (${now}, ${dataTs})`);
+      return;
     }
 
     let values = [new Date().toISOString(), metadata.client_id, position.latitude, position.longitude,
@@ -258,6 +280,9 @@ module.exports = function(app) {
       //app.debug(JSON.stringify(data));
       let i;
       for (i = 0; i < data.length; i++) {
+        // Ensure we send only null or float for lat and long, so it can be ingore by the back-end.
+        data[i].latitude = isNaN(parseFloat(data[i].latitude)) ? null : data[i].latitude;
+        data[i].longitude = isNaN(parseFloat(data[i].longitude)) ? null : data[i].longitude;
         data[i].metrics = JSON.parse(data[i].metrics);
       }
       app.debug('DEBUG: metrics lastTime:' + data[data.length-1].time);
@@ -484,6 +509,10 @@ module.exports = function(app) {
     let value = dict.value;
     let timePassed = Date.now() - updateLastCalled;
 
+    if (typeof (path) === 'undefined' || typeof (value) === 'undefined') {
+      return;
+    }
+
     switch (path) {
       case 'navigation.position':
         app.debug('Save: ' + path);
@@ -492,17 +521,24 @@ module.exports = function(app) {
           app.debug(`Skipping position from GPS resource ${source}`);
           break;
         }
+        if (value.constructor !== ({}).constructor) {
+          app.debug(`Debug value`, value);
+          //console.log("Debug object value:", value);
+          app.error(`Debug object position:`, position, ' value:', value);
+          //console.log("Debug object position:", position);
+          break;
+        }
         if (position) {
           let distance = calculateDistance(position.latitude,
-                                           position.longitude,
-                                           value.latitude,
-                                           value.longitude);
+            position.longitude,
+            value.latitude,
+            value.longitude);
           let timeBetweenPositions = Date.now() - position.changedOn;
           if ((timeBetweenPositions <= 2 * 60 * 1000) && (distance >= 5)) {
-                  app.error(`Erroneous position reading. ` +
-                      `Moved ${distance} miles in ${timeBetweenPositions/1000} seconds. ` +
-                            `Ignoring the position: ${position.latitude}, ${position.longitude}`);
-            return;
+            app.error(`Erroneous position reading. ` +
+            `Moved ${distance} miles in ${timeBetweenPositions/1000} seconds. ` +
+            `Ignoring the position: ${position.latitude}, ${position.longitude}`);
+            break;
           }
 
           position.changedOn = Date.now();
@@ -529,7 +565,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status != "sailing" || status != "motoring") {
+              if (status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -541,7 +577,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status != "sailing" || status != "motoring") {
+              if (status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -554,7 +590,7 @@ module.exports = function(app) {
               position = value;
               position.changedOn = Date.now();
               // Force status while moving
-              if (status != "sailing" || status != "motoring") {
+              if (status != "motoring") {
                 status = 'sailing';
               }
               updateDatabase();
@@ -568,10 +604,13 @@ module.exports = function(app) {
                ) {
               position = value;
               position.changedOn = Date.now();
+              // Force status while moving
+              if (status != "motoring") {
+                status = 'sailing';
+              }
               updateDatabase();
             }
 
-            
           }
         } else {
           position = value;
@@ -611,8 +650,8 @@ module.exports = function(app) {
       */
       case 'navigation.state':
         // Wait for a valid status before sending data ?
-        if (path) {
-          app.debug(`Save: ${path} with value ${value}`);
+        if (value) {
+          app.debug(`Save: ${path} with value '${value}'`);
           status = value;
         }
         break;
@@ -626,6 +665,20 @@ module.exports = function(app) {
         // environment.sunlight.*
         // navigation.courseGreatCircle.*
         // design.*
+
+        // Debug
+        //app.debug(`default: path '${path}' is invalid?, '${value}'`);
+
+        // Include `*.state` like:
+        // - navigation.state
+        // - propulsion\.([A-Za-z0-9]+)\.state
+        // - steering.autopilot.state
+        const isState = path.match(/.*\.state/i);
+        if (isState) {
+          app.debug(`Add to metrics path: '${path}'`);
+          metrics[path] = value;
+        }
+
         if (path === '') {
           app.debug(`Skipping path '${path}' because is invalid, '${value}'`);
         } else if ( isNaN(value) || !isfloatField(value) || !isFinite(value) ) {
