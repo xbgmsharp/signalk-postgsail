@@ -11,17 +11,63 @@ Signal K server plugin to send all self SignalK numeric data and nagivation entr
 - Automatically capture the details of your voyages (boat speed, heading, wind speed, etc).
 - Timelapse video your trips!
 - Add custom notes to your logs.
-- Export to CSV or GPX and download your logs.
+- Export to CSV, GPX, GeoJSON, KML and download your logs.
 - Aggregate your trip statistics: Longest voyage, time spent at anchorages, home ports etc.
 - See your moorages on a global map, with incoming and outgoing voyages from each trip.
 - Monitor your boat (position, depth, wind, temperature, battery charge status, etc.) remotely with history.
 - Notification via email or PushOver.
 - Notification and monitor your boat via Telegram bot.
-- Offline mode
-- Low Bandwith mode
+- Offline mode.
+- Low Bandwith mode.
+- Awesome statistics and graphs.
+- Compatibles with Victron Cerbo GX monitoring devices as well as other Victron GX series.
+- Compatibles Raspberry Pi.
 
 ## Optional dependencies
 [signalk-autostate](https://www.npmjs.com/package/@meri-imperiumi/signalk-autostate) by @meri-imperiumi. Used to determine the vessel's state based on sensor values, and updates the `navigation.state` value accordingly.
 
+The [signalk-derived-data](https://github.com/sbender9/signalk-derived-data) and [signalk-path-mapper](https://github.com/sbender9/signalk-path-mapper) plugins are both useful to remap available data to the required canonical paths.
+
+## Source data
+
+The following SignalK paths are used by PostgSail to generate logbook and monitoring.
+[SignalK Keys Reference (Vessel)](
+http://signalk.org/specification/1.7.0/doc/vesselsBranch.html)
+
+|SignalK path|Timeline name|Notes|
+|-|-|-|
+|`navigation.courseOverGroundTrue`|Course||
+|`navigation.headingTrue`|Heading||
+|`navigation.speedThroughWater`|||
+|`navigation.speedOverGround`|Speed||
+|`environment.wind.directionTrue`|Wind||
+|`environment.wind.speedOverGround`|Wind|||
+|`environment.*.pressure`|Baro|Pressure in zone|
+|`environment.*.temperature`|Temp||
+|`environment.*.relativeHumidity`|Ratio||
+|`environment.water.swell.state`|Sea||
+|`navigation.position`|Coordinates||
+|`navigation.log`|Log|If present, used to calculate distance|
+|`propulsion.*.runTime`|Engine|If present, used to calculate engine hour usage|
+|`steering.autopilot.state`||Autopilot changes are logged.|
+|`navigation.state`||If present, used to start and stop automated hourly entries. Changes are logged.|
+|`propulsion.*.state`||Propulsion changes are logged.|
+|`electrical.batteries.*.voltage`||Voltage measured|
+|`electrical.batteries.*.stateOfCharge`|ratio|State of charge, 1 = 100%|
+|`electrical.solar.*`||Solar measured|
+|`tanks.*.currentLevel`||Level of fluid in tank 0-100%|
+|`tanks.*.capacity.*`||Total capacity
+
+The [signalk-derived-data](https://github.com/sbender9/signalk-derived-data) and [signalk-path-mapper](https://github.com/sbender9/signalk-path-mapper) plugins are both useful to remap available data to the required canonical paths.
+
 ## Cloud
 Optional a free account on [iot.openplotter.cloud](https://iot.openplotter.cloud/).
+
+### Cloud development
+
+A full-featured development environment ready to test and code.
+
+#### With DevPod
+
+- [![Open in DevPod!](https://devpod.sh/assets/open-in-devpod.svg)](https://devpod.sh/open#https://github.com/xbgmsharp/signalk-postgsail&workspace=signalk-postgsail&provider=docker&ide=openvscode)
+  - or via [direct link](https://devpod.sh/open#https://github.com/xbgmsharp/signalk-postgsail&workspace=signalk-postgsail&provider=docker&ide=openvscode)
