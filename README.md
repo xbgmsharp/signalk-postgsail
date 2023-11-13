@@ -1,10 +1,10 @@
 # Signal K PostgSail plugin
 PostgSail effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything. Built for sailors, motorboats and commercial uses.
 
-Send, monitor, alert, observe all numeric values & positions & status to a self-hosted or cloud instances of [PostgSail](https://github.com/xbgmsharp/signalk-postgsail) (PostgreSQL, Grafana).
+Send, monitor, alert, observe all numeric values & positions & status to a self-hosted or cloud instances of [PostgSail](https://github.com/xbgmsharp/postgsail) (PostgreSQL, Grafana).
 
 ## Description
-Signal K server plugin to send all self SignalK numeric data and nagivation entry to a [PostgSail](https://github.com/xbgmsharp/signalk-postgsail) server.
+Signal K server plugin to send all self SignalK numeric data and nagivation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
