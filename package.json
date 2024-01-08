@@ -15,7 +15,7 @@
   "author": "Francois Lacroix <xbgmsharp@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "axios": "^0.27.2",
+    "axios": "^1.6.5",
     "moment": "^2.29.4",
     "sqlite3": "^5.0.2"
   },
