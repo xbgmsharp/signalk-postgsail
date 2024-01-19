@@ -1,6 +1,6 @@
 {
   "name": "signalk-postgsail",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Automatically log your sails and remotely monitor your boat with history. Your vessel logbook, monitoring and visibility open-source stack.",
   "main": "index.js",
   "scripts": {
