@@ -110,7 +110,7 @@ module.exports = function (app) {
       baseURL: host,
       timeout: 50000,
       headers: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
         "User-Agent": `postgsail.signalk v${metadata.plugin_version}`,
       },
       httpsAgent: new https.Agent({ KeepAlive: true }),
