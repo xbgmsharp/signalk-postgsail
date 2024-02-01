@@ -4,24 +4,27 @@ PostgSail effortlessly logs your voyages, automatically capturing your trips, mo
 Send, monitor, alert, observe all numeric values & positions & status to a self-hosted or cloud instances of [PostgSail](https://github.com/xbgmsharp/postgsail) (PostgreSQL, Grafana).
 
 ## Description
-Signal K server plugin to send all self SignalK numeric data and nagivation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
+Signal K server plugin to send all self SignalK numeric data and navigation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
 - Automatically capture the details of your voyages (boat speed, heading, wind speed, etc).
 - Timelapse video your trips!
-- Add custom notes to your logs.
+- Add custom notes and more to your logs.
 - Export to CSV, GPX, GeoJSON, KML and download your logs.
 - Aggregate your trip statistics: Longest voyage, time spent at anchorages, home ports etc.
 - See your moorages on a global map, with incoming and outgoing voyages from each trip.
 - Monitor your boat (position, depth, wind, temperature, battery charge status, etc.) remotely with history.
-- Notification via email or PushOver.
+- Notification via email or PushOver Or Telegram.
 - Notification and monitor your boat via Telegram bot.
 - Offline mode.
-- Low Bandwith mode.
+- Low Bandwidth mode.
 - Awesome statistics and graphs.
+- Create and manage your own dashboards.
 - Compatibles with Victron Cerbo GX monitoring devices as well as other Victron GX series.
 - Compatibles Raspberry Pi.
+- Windy PWS (Personal Weather Station).
+- Anything missing? just ask!
 
 ## Optional dependencies
 [signalk-autostate](https://www.npmjs.com/package/@meri-imperiumi/signalk-autostate) by @meri-imperiumi. Used to determine the vessel's state based on sensor values, and updates the `navigation.state` value accordingly.
@@ -63,6 +66,10 @@ The [signalk-derived-data](https://github.com/sbender9/signalk-derived-data) and
 ## Cloud
 Optional a free account on [iot.openplotter.cloud](https://iot.openplotter.cloud/).
 
+# Self-hosted
+Host your own [PostgSail](https://github.com/xbgmsharp/postgsail) server/
+
+## Development
 ### Cloud development
 
 A full-featured development environment ready to test and code.
