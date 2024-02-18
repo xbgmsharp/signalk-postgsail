@@ -7,7 +7,7 @@ Send, monitor, alert, observe all numeric values & positions & status to a self-
 Signal K server plugin to send all self SignalK numeric data and navigation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
 ## Demo
-[PostgSail](https://github.com/xbgmsharp/signalk-postgsail/demo.gif)
+[PostgSail Demo](https://github.com/xbgmsharp/signalk-postgsail/blob/main/demo.gif?raw=true)
 
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
