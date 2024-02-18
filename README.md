@@ -6,6 +6,9 @@ Send, monitor, alert, observe all numeric values & positions & status to a self-
 ## Description
 Signal K server plugin to send all self SignalK numeric data and navigation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
+## Demo
+[PostgSail](https://github.com/xbgmsharp/signalk-postgsail/demo.gif)
+
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
 - Automatically capture the details of your voyages (boat speed, heading, wind speed, etc).
@@ -64,10 +67,10 @@ http://signalk.org/specification/1.7.0/doc/vesselsBranch.html)
 The [signalk-derived-data](https://github.com/sbender9/signalk-derived-data) and [signalk-path-mapper](https://github.com/sbender9/signalk-path-mapper) plugins are both useful to remap available data to the required canonical paths.
 
 ## Cloud
-Optional a free account on [iot.openplotter.cloud](https://iot.openplotter.cloud/).
+Optional, create a free account on [iot.openplotter.cloud](https://iot.openplotter.cloud/).
 
-# Self-hosted
-Host your own [PostgSail](https://github.com/xbgmsharp/postgsail) server/
+## Self-hosted
+Host your own [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
 ## Development
 ### Cloud development
