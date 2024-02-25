@@ -7,7 +7,7 @@ Send, monitor, alert, observe all numeric values & positions & status to a self-
 Signal K server plugin to send all self SignalK numeric data and navigation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
 
 ## Demo
-![PostgSail Demo](https://github.com/xbgmsharp/signalk-postgsail/blob/main/demo.gif)
+![PostgSail Demo](https://github.com/xbgmsharp/signalk-postgsail/blob/main/demo.mp4)
 
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
@@ -42,15 +42,17 @@ http://signalk.org/specification/1.7.0/doc/vesselsBranch.html)
 
 |SignalK path|Timeline name|Notes|
 |-|-|-|
+|`navigation.state`||use for trip start/end and motoring vs sailing|
 |`navigation.courseOverGroundTrue`|Course||
 |`navigation.headingTrue`|Heading||
 |`navigation.speedThroughWater`|||
 |`navigation.speedOverGround`|Speed||
 |`environment.wind.directionTrue`|Wind||
+|`environment.wind.speedTrue`|Wind||
 |`environment.wind.speedOverGround`|Wind|||
 |`environment.*.pressure`|Baro|Pressure in zone|
 |`environment.*.temperature`|Temp||
-|`environment.*.relativeHumidity`|Ratio||
+|`environment.*.relativeHumidity`|Ratio|1 = 100%|
 |`environment.water.swell.state`|Sea||
 |`navigation.position`|Coordinates||
 |`navigation.log`|Log|If present, used to calculate distance|
@@ -59,10 +61,11 @@ http://signalk.org/specification/1.7.0/doc/vesselsBranch.html)
 |`navigation.state`||If present, used to start and stop automated hourly entries. Changes are logged.|
 |`propulsion.*.state`||Propulsion changes are logged.|
 |`electrical.batteries.*.voltage`||Voltage measured|
+|`electrical.batteries.*.current`||Current measured|
 |`electrical.batteries.*.stateOfCharge`|ratio|State of charge, 1 = 100%|
 |`electrical.solar.*`||Solar measured|
 |`tanks.*.currentLevel`||Level of fluid in tank 0-100%|
-|`tanks.*.capacity.*`||Total capacity
+|`tanks.*.capacity.*`||Total capacity|
 
 The [signalk-derived-data](https://github.com/sbender9/signalk-derived-data) and [signalk-path-mapper](https://github.com/sbender9/signalk-path-mapper) plugins are both useful to remap available data to the required canonical paths.
 
