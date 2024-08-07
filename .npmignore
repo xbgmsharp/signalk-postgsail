@@ -1,1 +1,5 @@
 .git*
+src/*
+dist/*
+node_modules/*
+demo.*
