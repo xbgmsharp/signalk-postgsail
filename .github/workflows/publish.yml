@@ -8,11 +8,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    name: Node ${{ matrix.node-version }} sample
     steps:
-      - uses: actions/checkout@v3.5.2
-      - uses: actions/setup-node@v4.0.1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 12
+          node-version: ${{ matrix.node-version }}
       - run: npm install
       - run: npm test
 
@@ -20,10 +24,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3.5.2
-      - uses: actions/setup-node@v4.0.1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 12
+          node-version: 20
           registry-url: https://registry.npmjs.org/
       - run: npm publish
         env:
