@@ -90,10 +90,9 @@ module.exports = function (app) {
     "PostgSail plugin for Signal K. Automatic logbook and observability.";
 
   plugin.start = function (options) {
-
     if (!options.token) {
-      app.error('Token is required');
-      return
+      app.error("Token is required");
+      return;
     }
 
     metadata.platform = findPlatform();
@@ -162,11 +161,21 @@ module.exports = function (app) {
     statusProcess = setInterval(function () {
       db.all("SELECT * FROM buffer ORDER BY time", function (err, data) {
         let message;
-        if (data.length == 1) {
-          message = `${data.length} entry in the queue,`;
-        } else {
-          message = `${data.length} entries in the queue,`;
+        if (err) {
+          console.log("signalk-postgsail - statusProcess failed", err);
+          app.debug(`signalk-postgsail - statusProcess failed ${err}`);
+          app.setPluginError(`statusProcess failed ${err}`);
         }
+        if (data) {
+          if (data.length == 1) {
+            message = `${data.length} entry in the queue,`;
+          } else {
+            message = `${data.length} entries in the queue,`;
+          }
+        } else {
+          message = `no data in the queue,`;
+        }
+
         if (lastSuccessfulUpdate) {
           let since = timeSince(lastSuccessfulUpdate);
           message += ` last connection to the server was ${since} ago.`;
