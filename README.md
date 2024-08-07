@@ -12,21 +12,23 @@ https://github.com/xbgmsharp/signalk-postgsail/assets/1498985/b2669c39-11ad-4a50
 ## Features
 - Automatically log your voyages without manually starting or stopping a trip.
 - Automatically capture the details of your voyages (boat speed, heading, wind speed, etc).
-- Timelapse video your trips!
-- Add custom notes and more to your logs.
+- Timelapse video your trips, with or without time control.
+- Add custom notes to your logs.
 - Export to CSV, GPX, GeoJSON, KML and download your logs.
+- Export your logs as image (PNG) or video (MP4).
 - Aggregate your trip statistics: Longest voyage, time spent at anchorages, home ports etc.
 - See your moorages on a global map, with incoming and outgoing voyages from each trip.
-- Monitor your boat (position, depth, wind, temperature, battery charge status, etc.) remotely with history.
-- Notification via email or PushOver Or Telegram.
-- Notification and monitor your boat via Telegram bot.
+- Monitor your boat (position, depth, wind, temperature, battery charge status, etc.) remotely.
+- History: view trends.
+- Alert monitoring: get notification on low voltage or low fuel remotely.
+- Notification via email or PushOver, Telegram.
 - Offline mode.
 - Low Bandwidth mode.
 - Awesome statistics and graphs.
 - Create and manage your own dashboards.
-- Compatibles with Victron Cerbo GX monitoring devices as well as other Victron GX series.
-- Compatibles Raspberry Pi.
 - Windy PWS (Personal Weather Station).
+- Engine Hours Logger.
+- Polar performance.
 - Anything missing? just ask!
 
 ## Optional dependencies
