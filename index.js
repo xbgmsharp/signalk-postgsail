@@ -1,6 +1,6 @@
 /*
  * Copyright 2019-2021 Ilker Temir <ilker@ilkertemir.com>
- * Copyright 2021-2024 Francois Lacroix <xbgmsharp@gmail.com>
+ * Copyright 2021-2025 Francois Lacroix <xbgmsharp@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,8 +44,6 @@ module.exports = function (app) {
   var statusProcess;
   var db;
   var API;
-  var host;
-  var token;
   var gpsSource;
   var status = null;
   var metrics = {};
@@ -60,11 +58,12 @@ module.exports = function (app) {
   var angleSpeedApparent = 0;
   var previousSpeeds = [];
   var previousCOGs = [];
+  var retrieveMonitoringConfigInProgress = false;
 
   var metadata = {
     name: app.getSelfPath("name") ? app.getSelfPath("name") : null,
     mmsi: app.getSelfPath("mmsi") ? app.getSelfPath("mmsi") : null,
-    client_id: app.selfContext,
+    //client_id: app.selfContext,
     length: app.getSelfPath("design.length.value.overall")
       ? app.getSelfPath("design.length.value.overall")
       : null,
@@ -81,7 +80,8 @@ module.exports = function (app) {
     signalk_version: app.config.version,
     time: new Date().toISOString(),
     platform: null,
-    configuration: null,
+    //configuration: null,
+    available_keys: null,
   };
 
   plugin.id = "signalk-postgsail";
@@ -97,23 +97,23 @@ module.exports = function (app) {
 
     metadata.platform = findPlatform();
     app.debug(`Running on ${metadata.platform}`);
-    metadata.configuration = options;
     app.setPluginStatus("PostgSail started. Please wait for a status update.");
+    configuration = options;
+    monitoringConfiguration = options?.monitoring == null ? null : options.monitoring;
 
-    host = options.host;
-    token = options.token;
     gpsSource = options.source;
     app.debug(`host ${options.host}, token:${options.token}`);
 
     API = axios.create({
-      baseURL: host,
+      baseURL: options.host,
       timeout: 50000,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${options.token}`,
         "User-Agent": `postgsail.signalk v${metadata.plugin_version}`,
       },
       httpsAgent: new https.Agent({ KeepAlive: true }),
     });
+    getConfiguration();
     sendMetadata();
 
     let dbFile = filePath.join(app.getDataDirPath(), "postgsail.sqlite3");
@@ -175,7 +175,6 @@ module.exports = function (app) {
         } else {
           message = `no data in the queue,`;
         }
-
         if (lastSuccessfulUpdate) {
           let since = timeSince(lastSuccessfulUpdate);
           message += ` last connection to the server was ${since} ago.`;
@@ -194,6 +193,8 @@ module.exports = function (app) {
             app.setPluginError(
               "No navigation.state path, please install signalk-autostate."
             );
+          } else {
+            app.setPluginError("");
           }
         }
         app.setPluginStatus(message);
@@ -258,7 +259,7 @@ module.exports = function (app) {
       return platform;
     }
 
-    let platform = null;
+    let platform = "";
     try {
       const cpuInfo = fs.readFileSync("/proc/cpuinfo", {
         encoding: "utf8",
@@ -284,10 +285,99 @@ module.exports = function (app) {
     return platform;
   }
 
+  function saveConfiguration() {
+    app.savePluginOptions(configuration, () => {
+      app.debug("Plugin options saved");
+    });
+  }
+
+  function loadConfiguration() {
+    let options = app.readPluginOptions();
+    app.debug("loadConfiguration", options);
+    configuration = options.configuration;
+  }
+
+  function getConfiguration(update = false) {
+    if (retrieveMonitoringConfigInProgress) {
+      app.debug("Monitoring configuration retrieval already in progress");
+      return;
+    }
+    retrieveMonitoringConfigInProgress = true;
+    let url = "/metadata?select=configuration";
+    if (update && configuration?.monitoring?.update_at) {
+      url += "&configuration->>update_at=gt." + configuration.monitoring.update_at;
+    }
+    app.debug("Retrieving monitoring configuration", url);
+    API.get(url)
+      .then(function (response) {
+        //console.log(response);
+        //app.debug(response);
+        if (
+          response &&
+          response.status == 200 &&
+          Array.isArray(response.data) &&
+          response.data.length > 0
+        ) {
+          app.debug("Successfully retrieved monitoring configuration");
+          app.debug("Server monitoring configuration", response.data[0].configuration);
+          app.debug("Local current configuration", configuration);
+          if (typeof response.data[0].configuration !== "object") {
+            app.debug("Invalid monitoring configuration, ignore");
+            return;
+          }
+          configuration["monitoring"] = response.data[0].configuration;
+          saveConfiguration();
+          retrieveMonitoringConfigInProgress = false;
+        }
+      })
+      .catch(function (error) {
+        app.debug(error);
+        app.debug("Retrieving monitoring configuration failed");
+        console.log(
+          "signalk-postgsail - Retrieving monitoring configuration failed"
+        );
+        app.debug(
+          "Failed to get monitoring configuration, trying to load from local storage"
+        );
+        loadConfiguration();
+        retrieveMonitoringConfigInProgress = false;
+      });
+  }
+
   function sendMetadata() {
+    function getAllKeys(obj, parentKey = "", result = []) {
+      for (let key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          const newKey = parentKey ? `${parentKey}.${key}` : key;
+          if (obj[key] !== null && typeof obj[key] === "object") {
+            if (obj[key]["$source"]) {
+              if (
+                obj[key].value !== null &&
+                typeof obj[key].value === "number"
+              ) {
+                result.push({
+                  key: newKey,
+                  unit: obj[key]?.meta?.units ?? null,
+                });
+              }
+            } else {
+              getAllKeys(obj[key], newKey, result);
+            }
+          }
+        }
+      }
+      return result;
+    }
+
+    let self = app.getPath("self");
+    let dataModel = app.getPath(self);
+    let availableKeys = getAllKeys(dataModel);
+    //console.log(availableKeys);
+    app.debug('available_keys: ', availableKeys);
+    metadata.available_keys = availableKeys;
     // Update metadata time
     metadata.time = new Date().toISOString();
-    app.debug("DEBUG: metadata:", metadata);
+    app.debug("Sending metadata to the server: ", metadata);
     API.post("/metadata?on_conflict=vessel_id", metadata, {
       headers: {
         Prefer: "return=headers-only,resolution=merge-duplicates",
@@ -300,6 +390,7 @@ module.exports = function (app) {
           //app.debug(response);
           lastSuccessfulUpdate = Date.now();
           submitDataToServer();
+          getConfiguration(true)
         }
       })
       .catch(function (error) {
@@ -356,6 +447,16 @@ module.exports = function (app) {
         `No position data, not recording information (${now}, ${dataTs})`
       );
       return;
+    }
+
+    let monitoringDataInJson = null;
+    if (configuration?.monitoring) {
+      let monitoringData = getMonitoringData(configuration.monitoring);
+      //monitoringDataInJson = JSON.stringify(monitoringData);
+      metrics = Object.assign(metrics, monitoringData);
+    } else {
+      getConfiguration();
+      monitoringDataInJson = null;
     }
 
     let values = [
@@ -843,8 +944,11 @@ module.exports = function (app) {
         /* Skip String, Object (typeof?) or skip Moon, Sun, Course */
         // environment.moon.*
         // environment.sunlight.*
+        // environment.forecast.*
         // navigation.courseGreatCircle.*
         // design.*
+        // entertainment.*
+        // observations.*
 
         // Debug
         //app.debug(`default: path '${path}' is invalid?, '${value}'`);
@@ -875,6 +979,52 @@ module.exports = function (app) {
   let isfloatField = function (n) {
     return Number(n) === n;
   };
+
+  function getMonitoringData(configuration) {
+    let data = {
+      sog: getKeyValue('navigation.speedOverGround', 60),
+      cog: getKeyValue('navigation.courseOverGroundTrue', 60),
+      heading: getKeyValue('navigation.headingTrue', 60),
+      anchor: {
+        position: getKeyValue('navigation.anchor.position', 60),
+        radius: getKeyValue('navigation.anchor.maxRadius', 60)
+      },
+      water: {
+        depth: getKeyValue(configuration.depthKey, 10),
+        temperature:getKeyValue(configuration.waterTemperatureKey, 90)
+      },
+      wind: {
+        speed: getKeyValue(configuration.windSpeedKey, 90),
+        direction: getKeyValue(configuration.windDirectionKey, 90)
+      },
+      temperature: {
+        inside: getKeyValue(configuration.insidePressureKey, 90),
+        outside: getKeyValue(configuration.outsidePressureKey, 90)
+      },
+      temperature: {
+        inside: getKeyValue(configuration.insideTemperatureKey, 90),
+        outside: getKeyValue(configuration.outsideTemperatureKey, 90)
+      },
+      humidity: {
+        inside: getKeyValue(configuration.insideHumidityKey, 90),
+        outside: getKeyValue(configuration.outsideHumidityKey, 90)
+      },
+      battery: {
+        voltage: getKeyValue(configuration.batteryVoltageKey, 60),
+        charge: getKeyValue(configuration.batteryChargeKey, 60)
+      }
+    };
+
+    for (let i = 0; i < configuration?.additionalDataKeys?.length; i++) {
+      let key = configuration.additionalDataKeys[i];
+      let value = getKeyValue(key, 90);
+      if (value) {
+        data[key] = value;
+      }
+    }
+
+    return data;
+  }
 
   return plugin;
 };
