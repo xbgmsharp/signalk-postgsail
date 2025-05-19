@@ -380,12 +380,12 @@ module.exports = function (app) {
     app.debug("Sending metadata to the server: ", metadata);
     API.post("/metadata?on_conflict=vessel_id", metadata, {
       headers: {
-        Prefer: "return=headers-only,resolution=merge-duplicates",
+        Prefer: "missing=default,return=headers-only,resolution=merge-duplicates",
       },
     })
       .then(function (response) {
         //console.log(response);
-        if (response && response.status == 201) {
+        if (response && (response.status == 201 || response.status == 200)) {
           app.debug("Successfully sent metadata to the server");
           //app.debug(response);
           lastSuccessfulUpdate = Date.now();
@@ -449,14 +449,12 @@ module.exports = function (app) {
       return;
     }
 
-    let monitoringDataInJson = null;
+    // If monitoring data merge it with the actual metrics
     if (configuration?.monitoring) {
       let monitoringData = getMonitoringData(configuration.monitoring);
-      //monitoringDataInJson = JSON.stringify(monitoringData);
       metrics = Object.assign(metrics, monitoringData);
     } else {
       getConfiguration();
-      monitoringDataInJson = null;
     }
 
     let values = [
@@ -508,8 +506,8 @@ module.exports = function (app) {
             ? null
             : data[i].longitude;
           data[i].metrics = JSON.parse(data[i].metrics);
-          // Set client_id to null, it is ignored
-          data[i].client_id = null;
+          // Delete client_id to null, it is ignored
+          delete data[i].client_id;
         }
         app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
         //console.log(`signalk-postgsail - metrics sending ${data.length} row(s), lastTime:` + data[data.length-1].time);
@@ -961,6 +959,14 @@ module.exports = function (app) {
         if (isState) {
           app.debug(`Add to metrics path: '${path}'`);
           metrics[path] = value;
+          break;
+        }
+        const isUnusedPath = path.match(/(MAIANA|forecast|sunlight|moon)/i);
+        if (isUnusedPath) {
+          app.debug(
+            `Skipping path '${path}' because value is unused, '${isUnusedPath}'`
+          );
+          break;
         }
 
         if (path === "") {
@@ -997,7 +1003,7 @@ module.exports = function (app) {
         speed: getKeyValue(configuration.windSpeedKey, 90),
         direction: getKeyValue(configuration.windDirectionKey, 90)
       },
-      temperature: {
+      presure: {
         inside: getKeyValue(configuration.insidePressureKey, 90),
         outside: getKeyValue(configuration.outsidePressureKey, 90)
       },
@@ -1010,8 +1016,15 @@ module.exports = function (app) {
         outside: getKeyValue(configuration.outsideHumidityKey, 90)
       },
       battery: {
-        voltage: getKeyValue(configuration.batteryVoltageKey, 60),
-        charge: getKeyValue(configuration.batteryChargeKey, 60)
+        voltage: getKeyValue(configuration.voltageKey, 90),
+        charge: getKeyValue(configuration.stateOfChargeKey, 90)
+      },
+      solar: {
+        voltage: getKeyValue(configuration.solarVoltageKey, 90),
+        power: getKeyValue(configuration.solarPowerKey, 90)
+      },
+      tank: {
+        level: getKeyValue(configuration.tankLevelKey, 90)
       }
     };
 
