@@ -165,6 +165,9 @@ module.exports = function (app) {
 
     const statusProcess = setInterval(() => {
       let message;
+      // Clear previous error
+      app.setPluginStatus("PostgSail started. Please wait for a status update.");
+      app.setPluginError("");
 
       try {
         const stmt = db.prepare("SELECT * FROM buffer ORDER BY time");
