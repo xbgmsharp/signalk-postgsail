@@ -30,9 +30,8 @@ const BUFFER_LIMIT = 31; // Submit only X buffer entries at a time Prod
 const fs = require("fs");
 const filePath = require("path");
 const axios = require("axios");
-const sqlite3 = require("sqlite3");
+const Database = require("better-sqlite3");
 const zlib = require("zlib");
-const moment = require("moment");
 const https = require("https");
 const mypackage = require("./package.json");
 
@@ -99,7 +98,8 @@ module.exports = function (app) {
     app.debug(`Running on ${metadata.platform}`);
     app.setPluginStatus("PostgSail started. Please wait for a status update.");
     configuration = options;
-    monitoringConfiguration = options?.monitoring == null ? null : options.monitoring;
+    monitoringConfiguration =
+      options?.monitoring == null ? null : options.monitoring;
 
     gpsSource = options.source;
     app.debug(`host ${options.host}, token:${options.token}`);
@@ -117,19 +117,24 @@ module.exports = function (app) {
     sendMetadata();
 
     let dbFile = filePath.join(app.getDataDirPath(), "postgsail.sqlite3");
-    db = new sqlite3.Database(dbFile);
-    db.run(
-      "CREATE TABLE IF NOT EXISTS buffer(time REAL," +
-        "                                 client_id TEXT," +
-        "                                 latitude REAL," +
-        "                                 longitude REAL," +
-        "                                 speedoverground REAL," +
-        "                                 courseovergroundtrue REAL," +
-        "                                 windspeedapparent REAL," +
-        "                                 anglespeedapparent REAL," +
-        "                                 status TEXT," +
-        "                                 metrics JSON)"
-    );
+    db = new Database(dbFile);
+    // Create the table if it doesn't exist
+    db.prepare(
+      `
+  CREATE TABLE IF NOT EXISTS buffer (
+    time REAL,
+    client_id TEXT,
+    latitude REAL,
+    longitude REAL,
+    speedoverground REAL,
+    courseovergroundtrue REAL,
+    windspeedapparent REAL,
+    anglespeedapparent REAL,
+    status TEXT,
+    metrics JSON
+  )
+`
+    ).run();
 
     let subscription = {
       context: "vessels.self",
@@ -158,47 +163,57 @@ module.exports = function (app) {
       submitDataToServer();
     }, SUBMIT_INTERVAL * 60 * 1000);
 
-    statusProcess = setInterval(function () {
-      db.all("SELECT * FROM buffer ORDER BY time", function (err, data) {
-        let message;
-        if (err) {
+    const statusProcess = setInterval(() => {
+      let message;
+
+      if (db && db.open) {
+        try {
+          const stmt = db.prepare("SELECT * FROM buffer ORDER BY time");
+          const data = stmt.all(); // Synchronous, returns an array
+          if (data && data.length > 0) {
+            if (data.length === 1) {
+              message = `${data.length} entry in the queue,`;
+            } else {
+              message = `${data.length} entries in the queue,`;
+            }
+          } else {
+            message = `no data in the queue,`;
+          }
+        } catch (err) {
           console.log("signalk-postgsail - statusProcess failed", err);
           app.debug(`signalk-postgsail - statusProcess failed ${err}`);
           app.setPluginError(`statusProcess failed ${err}`);
+          message = "error retrieving queue status,";
         }
-        if (data) {
-          if (data.length == 1) {
-            message = `${data.length} entry in the queue,`;
-          } else {
-            message = `${data.length} entries in the queue,`;
-          }
+      } else {
+        console.log("signalk-postgsail - statusProcess Database is not open");
+      }
+
+      if (lastSuccessfulUpdate) {
+        const since = timeSince(lastSuccessfulUpdate);
+        message += ` last connection to the server was ${since} ago.`;
+      } else {
+        message += ` no successful connection to the server since restart.`;
+      }
+
+      // Check for null status and fall back on navigation.state
+      app.debug("statusProcess status", status);
+      if (status == null) {
+        const autostate = app.getSelfPath("navigation.state");
+        app.debug("autostate", autostate);
+        if (typeof autostate !== "object") {
+          app.debug(
+            "No navigation.state path, please install signalk-autostate."
+          );
+          app.setPluginError(
+            "No navigation.state path, please install signalk-autostate."
+          );
         } else {
-          message = `no data in the queue,`;
+          app.setPluginError("");
         }
-        if (lastSuccessfulUpdate) {
-          let since = timeSince(lastSuccessfulUpdate);
-          message += ` last connection to the server was ${since} ago.`;
-        } else {
-          message += ` no successful connection to the server since restart.`;
-        }
-        // If status is null, check for autostate plugin?
-        app.debug("statusProcess status", status);
-        if (status == null) {
-          let autostate = app.getSelfPath("navigation.state");
-          app.debug("autostate", autostate);
-          if (typeof autostate !== "object") {
-            app.debug(
-              "No navigation.state path, please install signalk-autostate."
-            );
-            app.setPluginError(
-              "No navigation.state path, please install signalk-autostate."
-            );
-          } else {
-            app.setPluginError("");
-          }
-        }
-        app.setPluginStatus(message);
-      });
+      }
+
+      app.setPluginStatus(message);
     }, 31 * 1000);
   };
 
@@ -305,7 +320,8 @@ module.exports = function (app) {
     retrieveMonitoringConfigInProgress = true;
     let url = "/metadata?select=configuration";
     if (update && configuration?.monitoring?.update_at) {
-      url += "&configuration->>update_at=gt." + configuration.monitoring.update_at;
+      url +=
+        "&configuration->>update_at=gt." + configuration.monitoring.update_at;
     }
     app.debug("Retrieving monitoring configuration", url);
     API.get(url)
@@ -319,7 +335,10 @@ module.exports = function (app) {
           response.data.length > 0
         ) {
           app.debug("Successfully retrieved monitoring configuration");
-          app.debug("Server monitoring configuration", response.data[0].configuration);
+          app.debug(
+            "Server monitoring configuration",
+            response.data[0].configuration
+          );
           app.debug("Local current configuration", configuration);
           if (typeof response.data[0].configuration !== "object") {
             app.debug("Invalid monitoring configuration, ignore");
@@ -373,14 +392,15 @@ module.exports = function (app) {
     let dataModel = app.getPath(self);
     let availableKeys = getAllKeys(dataModel);
     //console.log(availableKeys);
-    app.debug('available_keys: ', availableKeys);
+    app.debug("available_keys: ", availableKeys);
     metadata.available_keys = availableKeys;
     // Update metadata time
     metadata.time = new Date().toISOString();
     app.debug("Sending metadata to the server: ", metadata);
     API.post("/metadata?on_conflict=vessel_id", metadata, {
       headers: {
-        Prefer: "missing=default,return=headers-only,resolution=merge-duplicates",
+        Prefer:
+          "missing=default,return=headers-only,resolution=merge-duplicates",
       },
     })
       .then(function (response) {
@@ -390,7 +410,7 @@ module.exports = function (app) {
           //app.debug(response);
           lastSuccessfulUpdate = Date.now();
           submitDataToServer();
-          getConfiguration(true)
+          getConfiguration(true);
         }
       })
       .catch(function (error) {
@@ -470,154 +490,130 @@ module.exports = function (app) {
       JSON.stringify(metrics),
     ];
 
-    db.run(
-      "INSERT INTO buffer VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      values,
-      function (err) {
-        windSpeedApparent = 0;
-        maxSpeedOverGround = 0;
-      }
-    );
+    try {
+      const stmt = db.prepare(
+        "INSERT INTO buffer VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      );
+      stmt.run(values);
+      windSpeedApparent = 0;
+      maxSpeedOverGround = 0;
+    } catch (err) {
+      console.error("Database insert failed:", err);
+    }
     position.changedOn = null;
   }
 
   function submitDataToServer() {
     app.debug("submitDataToServer");
-    // Limit the numbers of entries for slow connection, 1 entry/row a minutes submit every 10min
-    // and reduce memory usage
-    db.all(
-      `SELECT * FROM buffer ORDER BY time LIMIT ${BUFFER_LIMIT}`,
-      function (err, data) {
-        //db.all('SELECT * FROM buffer ORDER BY time LIMIT 2', function(err, data) {
-        //db.all('SELECT * FROM buffer ORDER BY time', function(err, data) {
-        if (!data || data.length == 0) {
-          app.debug("Nothing to send to the server, skipping");
-          return;
-        }
-        app.debug(`DEBUG: metrics sending ${data.length} row(s)`);
-        //app.debug(JSON.stringify(data));
-        let i;
-        for (i = 0; i < data.length; i++) {
-          // Ensure we send only null or float for lat and long, so it can be ignore by the back-end.
-          data[i].latitude = isNaN(parseFloat(data[i].latitude))
-            ? null
-            : data[i].latitude;
-          data[i].longitude = isNaN(parseFloat(data[i].longitude))
-            ? null
-            : data[i].longitude;
-          data[i].metrics = JSON.parse(data[i].metrics);
-          // Delete client_id to null, it is ignored
-          delete data[i].client_id;
-        }
-        app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
-        //console.log(`signalk-postgsail - metrics sending ${data.length} row(s), lastTime:` + data[data.length-1].time);
-        /* *
-         * TODO ADD compression GZIP
-         * https://www.geeksforgeeks.org/node-js-zlib-gzipsync-method/
-         * https://www.stedi.com/docs/edi-core/compression
-         * */
-        API.post(
-          "/metrics?select=time",
-          data,
-          //API.post('/metrics?select=time', zlib.gzipSync(data),
-          {
-            headers: {
-              Prefer: "return=representation",
-              "Content-Type": "application/json",
-              //'content-type': 'application/gzip',
-              //'accept-encoding': 'gzip'
-            },
-          }
-        )
-          .then(function (response) {
-            //console.log(response);
-            if (response && response.status == 201 && response.data) {
-              app.debug(response.data);
-              let lastTs = null;
-              if (response.data.length > 0) {
-                // response exclude timezone and trim 0 and it is UTC.
-                //lastTs = response.data[response.data.length-1].time+'Z';
-                //lastTs = new Date(response.data[response.data.length-1].time).toISOString();
-                lastTs = moment
-                  .utc(response.data[response.data.length - 1].time)
-                  .toISOString();
-                app.debug(`Response metrics lastTime <=${lastTs}`);
-              }
-              if (response.data.length != data.length) {
-                // If duplicated time might be ignored
-                app.debug(
-                  `Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`
-                );
-                lastTs = data[data.length - 1].time;
-              }
-              app.debug(
-                `Successfully sent ${data.length} record(s) to the server`
-              );
-              app.debug(`Removing from buffer <=${lastTs}`);
-              db.run(
-                "DELETE FROM buffer where time <= ?",
-                lastTs,
-                function cb(err) {
-                  if (err) {
-                    app.debug(`Failed to delete metrics from buffer`);
-                  } else {
-                    app.debug(`Buffer row(s) deleted: ${this.changes}`);
-                    if (this.changes && this.changes > 0) {
-                      app.debug(
-                        `Deleted metrics from buffer, req:${data.length}, got:${this.changes}`
-                      );
-                      // Wait and send new metrics data
-                      app.debug(
-                        "Successfully deleted metrics from buffer, will continue sending metrics to the server"
-                      );
-                      lastSuccessfulUpdate = Date.now();
-                      // Avoid conflict between setInterval data process and SetTimeout data process??
-                      setTimeout(function () {
-                        app.debug(
-                          "setTimeout, SubmitDataToServer, submitting next metrics batch"
-                        );
-                        submitDataToServer();
-                      }, 19 * 1000); // In 8 seconds
-                    } else {
-                      app.debug(
-                        `No operations runned on metrics from buffer: ${this.changes}`
-                      );
-                      console.log(
-                        "signalk-postgsail - warning removing metrics from buffer"
-                      );
-                    }
-                  }
-                }
-              );
-            }
-          })
-          .catch(function (error) {
-            app.debug(
-              `Connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
-            );
-            console.log(
-              `signalk-postgsail - connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
-            );
-            if (error.response) {
-              // The request was made and the server responded with a status code
-              // that falls out of the range of 2xx
-              console.log(error.response);
-              console.log(
-                "signalk-postgsail - Error the server responded with non 2xx a status code"
-              );
-            } else if (error.request) {
-              // The request was made but no response was received
-              // `error.request` is an instance of http.ClientRequest in node.js
-              //console.log(error.request);
-              console.log("signalk-postgsail - Error no response was received");
-            } else {
-              // Something happened in setting up the request that triggered an Error
-              console.log("signalk-postgsail - Error", error.message);
-            }
-            //console.log('signalk-postgsail - Error', error.config);
-          });
+
+    try {
+      const stmt = db.prepare(
+        `SELECT * FROM buffer ORDER BY time LIMIT ${BUFFER_LIMIT}`
+      );
+      const data = stmt.all();
+
+      if (!data || data.length === 0) {
+        app.debug("Nothing to send to the server, skipping");
+        return;
       }
-    );
+
+      app.debug(`DEBUG: metrics sending ${data.length} row(s)`);
+
+      for (let i = 0; i < data.length; i++) {
+        data[i].latitude = isNaN(parseFloat(data[i].latitude))
+          ? null
+          : data[i].latitude;
+        data[i].longitude = isNaN(parseFloat(data[i].longitude))
+          ? null
+          : data[i].longitude;
+        data[i].metrics = JSON.parse(data[i].metrics);
+        delete data[i].client_id;
+      }
+
+      app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
+
+      API.post("/metrics?select=time", data, {
+        headers: {
+          Prefer: "return=representation",
+          "Content-Type": "application/json",
+        },
+      })
+        .then(function (response) {
+          if (response && response.status === 201 && response.data) {
+            app.debug(response.data);
+            let lastTs = null;
+
+            if (response.data.length > 0) {
+              lastTs = new Date(
+                response.data[response.data.length - 1].time
+              ).toISOString();
+              app.debug(`Response metrics lastTime <=${lastTs}`);
+            }
+
+            if (response.data.length !== data.length) {
+              app.debug(
+                `Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`
+              );
+              lastTs = data[data.length - 1].time;
+            }
+
+            app.debug(
+              `Successfully sent ${data.length} record(s) to the server`
+            );
+            app.debug(`Removing from buffer <=${lastTs}`);
+
+            try {
+              const deleteStmt = db.prepare(
+                "DELETE FROM buffer WHERE time <= ?"
+              );
+              const result = deleteStmt.run(lastTs);
+              app.debug(`Buffer row(s) deleted: ${result.changes}`);
+
+              if (result.changes > 0) {
+                app.debug(
+                  `Deleted metrics from buffer, req:${data.length}, got:${result.changes}`
+                );
+                lastSuccessfulUpdate = Date.now();
+
+                setTimeout(function () {
+                  app.debug(
+                    "setTimeout, SubmitDataToServer, submitting next metrics batch"
+                  );
+                  submitDataToServer();
+                }, 19 * 1000);
+              } else {
+                app.debug(`No operations runned on metrics from buffer: 0`);
+                console.log(
+                  "signalk-postgsail - warning removing metrics from buffer"
+                );
+              }
+            } catch (err) {
+              app.debug(`Failed to delete metrics from buffer`);
+            }
+          }
+        })
+        .catch(function (error) {
+          app.debug(
+            `Connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
+          );
+          console.log(
+            `signalk-postgsail - connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
+          );
+
+          if (error.response) {
+            console.log(error.response);
+            console.log(
+              "signalk-postgsail - Error the server responded with non 2xx status code"
+            );
+          } else if (error.request) {
+            console.log("signalk-postgsail - Error no response was received");
+          } else {
+            console.log("signalk-postgsail - Error", error.message);
+          }
+        });
+    } catch (err) {
+      app.debug("submitDataToServer failed:", err);
+    }
   }
 
   function getKeyValue(key, maxAge) {
@@ -988,44 +984,44 @@ module.exports = function (app) {
 
   function getMonitoringData(configuration) {
     let data = {
-      sog: getKeyValue('navigation.speedOverGround', 60),
-      cog: getKeyValue('navigation.courseOverGroundTrue', 60),
-      heading: getKeyValue('navigation.headingTrue', 60),
+      sog: getKeyValue("navigation.speedOverGround", 60),
+      cog: getKeyValue("navigation.courseOverGroundTrue", 60),
+      heading: getKeyValue("navigation.headingTrue", 60),
       anchor: {
-        position: getKeyValue('navigation.anchor.position', 60),
-        radius: getKeyValue('navigation.anchor.maxRadius', 60)
+        position: getKeyValue("navigation.anchor.position", 60),
+        radius: getKeyValue("navigation.anchor.maxRadius", 60),
       },
       water: {
         depth: getKeyValue(configuration.depthKey, 10),
-        temperature:getKeyValue(configuration.waterTemperatureKey, 90)
+        temperature: getKeyValue(configuration.waterTemperatureKey, 90),
       },
       wind: {
         speed: getKeyValue(configuration.windSpeedKey, 90),
-        direction: getKeyValue(configuration.windDirectionKey, 90)
+        direction: getKeyValue(configuration.windDirectionKey, 90),
       },
       presure: {
         inside: getKeyValue(configuration.insidePressureKey, 90),
-        outside: getKeyValue(configuration.outsidePressureKey, 90)
+        outside: getKeyValue(configuration.outsidePressureKey, 90),
       },
       temperature: {
         inside: getKeyValue(configuration.insideTemperatureKey, 90),
-        outside: getKeyValue(configuration.outsideTemperatureKey, 90)
+        outside: getKeyValue(configuration.outsideTemperatureKey, 90),
       },
       humidity: {
         inside: getKeyValue(configuration.insideHumidityKey, 90),
-        outside: getKeyValue(configuration.outsideHumidityKey, 90)
+        outside: getKeyValue(configuration.outsideHumidityKey, 90),
       },
       battery: {
         voltage: getKeyValue(configuration.voltageKey, 90),
-        charge: getKeyValue(configuration.stateOfChargeKey, 90)
+        charge: getKeyValue(configuration.stateOfChargeKey, 90),
       },
       solar: {
         voltage: getKeyValue(configuration.solarVoltageKey, 90),
-        power: getKeyValue(configuration.solarPowerKey, 90)
+        power: getKeyValue(configuration.solarPowerKey, 90),
       },
       tank: {
-        level: getKeyValue(configuration.tankLevelKey, 90)
-      }
+        level: getKeyValue(configuration.tankLevelKey, 90),
+      },
     };
 
     for (let i = 0; i < configuration?.additionalDataKeys?.length; i++) {
