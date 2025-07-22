@@ -1,20 +1,19 @@
 {
   "name": "signalk-postgsail",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Automatically log your sails and remotely monitor your boat with history. Your vessel logbook, monitoring and visibility open-source stack.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 0"
   },
   "keywords": [
-    "signalk-node-server-plugin"
+    "signalk-node-server-plugin","signalk-category-hidden"
   ],
   "author": "Francois Lacroix <xbgmsharp@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "axios": "^0.27.2",
-    "moment": "^2.29.4",
-    "sqlite3": "^5.0.2"
+    "axios": "^1.9.0",
+    "better-sqlite3": "^11.10.0"
   },
   "repository": {
     "type": "git",
