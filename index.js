@@ -166,27 +166,24 @@ module.exports = function (app) {
     const statusProcess = setInterval(() => {
       let message;
 
-      if (db && db.open) {
-        try {
-          const stmt = db.prepare("SELECT * FROM buffer ORDER BY time");
-          const data = stmt.all(); // Synchronous, returns an array
-          if (data && data.length > 0) {
-            if (data.length === 1) {
-              message = `${data.length} entry in the queue,`;
-            } else {
-              message = `${data.length} entries in the queue,`;
-            }
+      try {
+        const stmt = db.prepare("SELECT * FROM buffer ORDER BY time");
+        const data = stmt.all(); // Synchronous, returns an array
+
+        if (data && data.length > 0) {
+          if (data.length === 1) {
+            message = `${data.length} entry in the queue,`;
           } else {
-            message = `no data in the queue,`;
+            message = `${data.length} entries in the queue,`;
           }
-        } catch (err) {
-          console.log("signalk-postgsail - statusProcess failed", err);
-          app.debug(`signalk-postgsail - statusProcess failed ${err}`);
-          app.setPluginError(`statusProcess failed ${err}`);
-          message = "error retrieving queue status,";
+        } else {
+          message = `no data in the queue,`;
         }
-      } else {
-        console.log("signalk-postgsail - statusProcess Database is not open");
+      } catch (err) {
+        console.log("signalk-postgsail - statusProcess failed", err);
+        app.debug(`signalk-postgsail - statusProcess failed ${err}`);
+        app.setPluginError(`statusProcess failed ${err}`);
+        message = "error retrieving queue status,";
       }
 
       if (lastSuccessfulUpdate) {
@@ -957,7 +954,7 @@ module.exports = function (app) {
           metrics[path] = value;
           break;
         }
-        const isUnusedPath = path.match(/(MAIANA|forecast|sunlight|moon)/i);
+        const isUnusedPath = path.match(/(MAIANA|forecast|sunlight|moon|observations)/i);
         if (isUnusedPath) {
           app.debug(
             `Skipping path '${path}' because value is unused, '${isUnusedPath}'`
