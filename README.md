@@ -1,3 +1,11 @@
+
+
+[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/xbgmsharp)
+[![](https://github.com/xbgmsharp/signalk-postgsail/workflows/publish/badge.svg)](https://github.com/xbgmsharp/signalk-postgsail/actions)
+[![npm version](https://img.shields.io/npm/v/signalk-postgsail.svg)](https://www.npmjs.com/package/signalk-postgsail)
+[![GitHub Repo stars](https://img.shields.io/github/stars/xbgmsharp/postgsail?style=social)](https://github.com/xbgmsharp/postgsail/stargazers)
+
+
 # Signal K PostgSail plugin
 PostgSail effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything. Built for sailors, motorboats and commercial uses.
 
