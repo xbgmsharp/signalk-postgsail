@@ -1,3 +1,24 @@
+<br/>
+<p align="center">
+  <a href="https://github.com/xbgmsharp/postgsail">
+    <img src="https://iot.openplotter.cloud/android-chrome-192x192.png" alt="Logo" width="80" height="80">
+  </a>
+
+  <h3 align="center">PostgSail</h3>
+
+  <p align="center">
+    PostgSail is an open-source alternative to traditional vessel data management!
+    <br/>
+    <br/>
+    <a href="#demo">View Demo</a>
+    .
+    <a href="https://xbgmsharp.github.io/postgsail/">Website</a>
+    .
+    <a href="https://github.com/sponsors/xbgmsharp">Sponsors</a>
+    .
+    <a href="https://discord.gg/uuZrwz4dCS">Discord</a>
+  </p>
+</p>
 
 
 [![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/xbgmsharp)
@@ -5,6 +26,7 @@
 [![npm version](https://img.shields.io/npm/v/signalk-postgsail.svg?color=blue
 )](https://www.npmjs.com/package/signalk-postgsail)
 [![GitHub Repo stars](https://img.shields.io/github/stars/xbgmsharp/postgsail?style=social)](https://github.com/xbgmsharp/postgsail/stargazers)
+[![License](https://img.shields.io/github/license/xbgmsharp/postgsail)](#license)
 
 
 # Signal K PostgSail plugin
