@@ -1,8 +1,9 @@
 
 
 [![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/xbgmsharp)
-[![](https://github.com/xbgmsharp/signalk-postgsail/workflows/publish/badge.svg)](https://github.com/xbgmsharp/signalk-postgsail/actions)
-[![npm version](https://img.shields.io/npm/v/signalk-postgsail.svg)](https://www.npmjs.com/package/signalk-postgsail)
+[![](https://github.com/xbgmsharp/signalk-postgsail/workflows/Publish%20Node.js%20Package/badge.svg)](https://github.com/xbgmsharp/signalk-postgsail/actions)
+[![npm version](https://img.shields.io/npm/v/signalk-postgsail.svg?color=blue
+)](https://www.npmjs.com/package/signalk-postgsail)
 [![GitHub Repo stars](https://img.shields.io/github/stars/xbgmsharp/postgsail?style=social)](https://github.com/xbgmsharp/postgsail/stargazers)
 
 
