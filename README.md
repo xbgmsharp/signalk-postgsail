@@ -22,17 +22,17 @@
 
 
 [![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/xbgmsharp)
+[![License](https://img.shields.io/github/license/xbgmsharp/postgsail)](#license)
 [![](https://github.com/xbgmsharp/signalk-postgsail/workflows/Publish%20Node.js%20Package/badge.svg)](https://github.com/xbgmsharp/signalk-postgsail/actions)
 [![npm version](https://img.shields.io/npm/v/signalk-postgsail.svg?color=blue
 )](https://www.npmjs.com/package/signalk-postgsail)
 [![GitHub Repo stars](https://img.shields.io/github/stars/xbgmsharp/postgsail?style=social)](https://github.com/xbgmsharp/postgsail/stargazers)
-[![License](https://img.shields.io/github/license/xbgmsharp/postgsail)](#license)
-
+![Sponsors](https://img.shields.io/github/sponsors/xbgmsharp?logo=github&color=blue)
 
 # Signal K PostgSail plugin
-PostgSail effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything. Built for sailors, motorboats and commercial uses.
+PostgSail is a feature-rich, fully automated, and maintenance-free marine solution to effortlessly logs your voyages, automatically capturing your trips, moorages, dockings and anchorages with no additional need to stop/start anything. Built by boaters for sailors, motorboats and commercial uses.
 
-Send, monitor, alert, observe all numeric values & positions & status to a self-hosted or cloud instances of [PostgSail](https://github.com/xbgmsharp/postgsail) (PostgreSQL, Grafana).
+Send, monitor, alert, observe all numeric values & positions & status to a self-hosted or cloud instances of [PostgSail](https://github.com/xbgmsharp/postgsail) (PostgreSQL, Grafana, API).
 
 ## Description
 Signal K server plugin to send all self SignalK numeric data and navigation entry to a [PostgSail](https://github.com/xbgmsharp/postgsail) server.
