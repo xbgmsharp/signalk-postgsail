@@ -1,6 +1,6 @@
 {
   "name": "signalk-postgsail",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Automatically log your sails and remotely monitor your boat with history. Your vessel logbook, monitoring and visibility open-source stack.",
   "main": "index.js",
   "scripts": {
@@ -13,7 +13,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "axios": "^1.9.0",
-    "better-sqlite3": "^11.10.0"
+    "better-sqlite3": "^12.0.0"
   },
   "repository": {
     "type": "git",
