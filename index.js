@@ -30,7 +30,6 @@ const BUFFER_LIMIT = 31; // Submit only X buffer entries at a time Prod
 const fs = require("fs");
 const filePath = require("path");
 const axios = require("axios");
-const Database = require("better-sqlite3");
 const zlib = require("zlib");
 const https = require("https");
 const mypackage = require("./package.json");
@@ -116,25 +115,32 @@ module.exports = function (app) {
     getConfiguration();
     sendMetadata();
 
-    let dbFile = filePath.join(app.getDataDirPath(), "postgsail.sqlite3");
-    db = new Database(dbFile);
-    // Create the table if it doesn't exist
-    db.prepare(
-      `
-  CREATE TABLE IF NOT EXISTS buffer (
-    time REAL,
-    client_id TEXT,
-    latitude REAL,
-    longitude REAL,
-    speedoverground REAL,
-    courseovergroundtrue REAL,
-    windspeedapparent REAL,
-    anglespeedapparent REAL,
-    status TEXT,
-    metrics JSON
-  )
-`
-    ).run();
+    app
+      .getDatabaseApi()
+      .getPluginDb(plugin.id)
+      .then((pluginDb) => {
+        db = pluginDb;
+        return db.migrate([
+          {
+            version: 1,
+            sql: `CREATE TABLE IF NOT EXISTS buffer (
+              time REAL,
+              client_id TEXT,
+              latitude REAL,
+              longitude REAL,
+              speedoverground REAL,
+              courseovergroundtrue REAL,
+              windspeedapparent REAL,
+              anglespeedapparent REAL,
+              status TEXT,
+              metrics JSON
+            )`,
+          },
+        ]);
+      })
+      .catch((err) => {
+        app.error("Failed to initialize database: " + err);
+      });
 
     let subscription = {
       context: "vessels.self",
@@ -164,56 +170,57 @@ module.exports = function (app) {
     }, SUBMIT_INTERVAL * 60 * 1000);
 
     const statusProcess = setInterval(() => {
-      let message;
-      // Clear previous error
+      if (!db) {
+        app.setPluginStatus("PostgSail started. Waiting for database...");
+        return;
+      }
       app.setPluginStatus("PostgSail started. Please wait for a status update.");
       app.setPluginError("");
 
-      try {
-        const stmt = db.prepare("SELECT * FROM buffer ORDER BY time");
-        const data = stmt.all(); // Synchronous, returns an array
-
-        if (data && data.length > 0) {
-          if (data.length === 1) {
-            message = `${data.length} entry in the queue,`;
+      db.query("SELECT * FROM buffer ORDER BY time")
+        .then((data) => {
+          if (data && data.length > 0) {
+            if (data.length === 1) {
+              return `${data.length} entry in the queue,`;
+            } else {
+              return `${data.length} entries in the queue,`;
+            }
           } else {
-            message = `${data.length} entries in the queue,`;
+            return `no data in the queue,`;
           }
-        } else {
-          message = `no data in the queue,`;
-        }
-      } catch (err) {
-        console.log("signalk-postgsail - statusProcess failed", err);
-        app.debug(`signalk-postgsail - statusProcess failed ${err}`);
-        app.setPluginError(`statusProcess failed ${err}`);
-        message = "error retrieving queue status,";
-      }
+        })
+        .catch((err) => {
+          console.log("signalk-postgsail - statusProcess failed", err);
+          app.debug(`signalk-postgsail - statusProcess failed ${err}`);
+          app.setPluginError(`statusProcess failed ${err}`);
+          return "error retrieving queue status,";
+        })
+        .then((message) => {
+          if (lastSuccessfulUpdate) {
+            const since = timeSince(lastSuccessfulUpdate);
+            message += ` last connection to the server was ${since} ago.`;
+          } else {
+            message += ` no successful connection to the server since restart.`;
+          }
 
-      if (lastSuccessfulUpdate) {
-        const since = timeSince(lastSuccessfulUpdate);
-        message += ` last connection to the server was ${since} ago.`;
-      } else {
-        message += ` no successful connection to the server since restart.`;
-      }
+          app.debug("statusProcess status", status);
+          if (status == null) {
+            const autostate = app.getSelfPath("navigation.state");
+            app.debug("autostate", autostate);
+            if (typeof autostate !== "object") {
+              app.debug(
+                "No navigation.state path, please install signalk-autostate."
+              );
+              app.setPluginError(
+                "No navigation.state path, please install signalk-autostate."
+              );
+            } else {
+              app.setPluginError("");
+            }
+          }
 
-      // Check for null status and fall back on navigation.state
-      app.debug("statusProcess status", status);
-      if (status == null) {
-        const autostate = app.getSelfPath("navigation.state");
-        app.debug("autostate", autostate);
-        if (typeof autostate !== "object") {
-          app.debug(
-            "No navigation.state path, please install signalk-autostate."
-          );
-          app.setPluginError(
-            "No navigation.state path, please install signalk-autostate."
-          );
-        } else {
-          app.setPluginError("");
-        }
-      }
-
-      app.setPluginStatus(message);
+          app.setPluginStatus(message);
+        });
     }, 31 * 1000);
   };
 
@@ -221,9 +228,6 @@ module.exports = function (app) {
     clearInterval(sendMetadataProcess);
     clearInterval(submitProcess);
     clearInterval(statusProcess);
-    if (db) {
-      db.close();
-    }
   };
 
   plugin.schema = {
@@ -450,6 +454,11 @@ module.exports = function (app) {
     let ts = Date.now();
     updateLastCalled = ts;
 
+    if (!db) {
+      app.debug("Database not ready yet, skipping update");
+      return;
+    }
+
     if (!position || !position.changedOn) {
       return;
     }
@@ -490,130 +499,128 @@ module.exports = function (app) {
       JSON.stringify(metrics),
     ];
 
-    try {
-      const stmt = db.prepare(
-        "INSERT INTO buffer VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      );
-      stmt.run(values);
-      windSpeedApparent = 0;
-      maxSpeedOverGround = 0;
-    } catch (err) {
-      console.error("Database insert failed:", err);
-    }
+    db.run("INSERT INTO buffer VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values)
+      .then(() => {
+        windSpeedApparent = 0;
+        maxSpeedOverGround = 0;
+      })
+      .catch((err) => {
+        console.error("Database insert failed:", err);
+      });
     position.changedOn = null;
   }
 
   function submitDataToServer() {
     app.debug("submitDataToServer");
 
-    try {
-      const stmt = db.prepare(
-        `SELECT * FROM buffer ORDER BY time LIMIT ${BUFFER_LIMIT}`
-      );
-      const data = stmt.all();
-
-      if (!data || data.length === 0) {
-        app.debug("Nothing to send to the server, skipping");
-        return;
-      }
-
-      app.debug(`DEBUG: metrics sending ${data.length} row(s)`);
-
-      for (let i = 0; i < data.length; i++) {
-        data[i].latitude = isNaN(parseFloat(data[i].latitude))
-          ? null
-          : data[i].latitude;
-        data[i].longitude = isNaN(parseFloat(data[i].longitude))
-          ? null
-          : data[i].longitude;
-        data[i].metrics = JSON.parse(data[i].metrics);
-        delete data[i].client_id;
-      }
-
-      app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
-
-      API.post("/metrics?select=time", data, {
-        headers: {
-          Prefer: "return=representation",
-          "Content-Type": "application/json",
-        },
-      })
-        .then(function (response) {
-          if (response && response.status === 201 && response.data) {
-            app.debug(response.data);
-            let lastTs = null;
-
-            if (response.data.length > 0) {
-              lastTs = new Date(
-                response.data[response.data.length - 1].time
-              ).toISOString();
-              app.debug(`Response metrics lastTime <=${lastTs}`);
-            }
-
-            if (response.data.length !== data.length) {
-              app.debug(
-                `Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`
-              );
-              lastTs = data[data.length - 1].time;
-            }
-
-            app.debug(
-              `Successfully sent ${data.length} record(s) to the server`
-            );
-            app.debug(`Removing from buffer <=${lastTs}`);
-
-            try {
-              const deleteStmt = db.prepare(
-                "DELETE FROM buffer WHERE time <= ?"
-              );
-              const result = deleteStmt.run(lastTs);
-              app.debug(`Buffer row(s) deleted: ${result.changes}`);
-
-              if (result.changes > 0) {
-                app.debug(
-                  `Deleted metrics from buffer, req:${data.length}, got:${result.changes}`
-                );
-                lastSuccessfulUpdate = Date.now();
-
-                setTimeout(function () {
-                  app.debug(
-                    "setTimeout, SubmitDataToServer, submitting next metrics batch"
-                  );
-                  submitDataToServer();
-                }, 19 * 1000);
-              } else {
-                app.debug(`No operations runned on metrics from buffer: 0`);
-                console.log(
-                  "signalk-postgsail - warning removing metrics from buffer"
-                );
-              }
-            } catch (err) {
-              app.debug(`Failed to delete metrics from buffer`);
-            }
-          }
-        })
-        .catch(function (error) {
-          app.debug(
-            `Connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
-          );
-          console.log(
-            `signalk-postgsail - connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
-          );
-
-          if (error.response) {
-            console.log(error.response);
-            console.log(
-              "signalk-postgsail - Error the server responded with non 2xx status code"
-            );
-          } else if (error.request) {
-            console.log("signalk-postgsail - Error no response was received");
-          } else {
-            console.log("signalk-postgsail - Error", error.message);
-          }
-        });
-    } catch (err) {
-      app.debug("submitDataToServer failed:", err);
+    if (!db) {
+      app.debug("Database not ready yet, skipping submit");
+      return;
     }
+
+    db.query(`SELECT * FROM buffer ORDER BY time LIMIT ${BUFFER_LIMIT}`)
+      .then((data) => {
+        if (!data || data.length === 0) {
+          app.debug("Nothing to send to the server, skipping");
+          return;
+        }
+
+        app.debug(`DEBUG: metrics sending ${data.length} row(s)`);
+
+        for (let i = 0; i < data.length; i++) {
+          data[i].latitude = isNaN(parseFloat(data[i].latitude))
+            ? null
+            : data[i].latitude;
+          data[i].longitude = isNaN(parseFloat(data[i].longitude))
+            ? null
+            : data[i].longitude;
+          data[i].metrics = JSON.parse(data[i].metrics);
+          delete data[i].client_id;
+        }
+
+        app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
+
+        API.post("/metrics?select=time", data, {
+          headers: {
+            Prefer: "return=representation",
+            "Content-Type": "application/json",
+          },
+        })
+          .then(function (response) {
+            if (response && response.status === 201 && response.data) {
+              app.debug(response.data);
+              let lastTs = null;
+
+              if (response.data.length > 0) {
+                lastTs = new Date(
+                  response.data[response.data.length - 1].time
+                ).toISOString();
+                app.debug(`Response metrics lastTime <=${lastTs}`);
+              }
+
+              if (response.data.length !== data.length) {
+                app.debug(
+                  `Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`
+                );
+                lastTs = data[data.length - 1].time;
+              }
+
+              app.debug(
+                `Successfully sent ${data.length} record(s) to the server`
+              );
+              app.debug(`Removing from buffer <=${lastTs}`);
+
+              db.run("DELETE FROM buffer WHERE time <= ?", [lastTs])
+                .then((result) => {
+                  app.debug(`Buffer row(s) deleted: ${result.changes}`);
+
+                  if (result.changes > 0) {
+                    app.debug(
+                      `Deleted metrics from buffer, req:${data.length}, got:${result.changes}`
+                    );
+                    lastSuccessfulUpdate = Date.now();
+
+                    setTimeout(function () {
+                      app.debug(
+                        "setTimeout, SubmitDataToServer, submitting next metrics batch"
+                      );
+                      submitDataToServer();
+                    }, 19 * 1000);
+                  } else {
+                    app.debug(`No operations runned on metrics from buffer: 0`);
+                    console.log(
+                      "signalk-postgsail - warning removing metrics from buffer"
+                    );
+                  }
+                })
+                .catch((err) => {
+                  app.debug(`Failed to delete metrics from buffer`);
+                });
+            }
+          })
+          .catch(function (error) {
+            app.debug(
+              `Connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
+            );
+            console.log(
+              `signalk-postgsail - connection to the server failed, retry in ${SUBMIT_INTERVAL} min`
+            );
+
+            if (error.response) {
+              console.log(error.response);
+              console.log(
+                "signalk-postgsail - Error the server responded with non 2xx status code"
+              );
+            } else if (error.request) {
+              console.log("signalk-postgsail - Error no response was received");
+            } else {
+              console.log("signalk-postgsail - Error", error.message);
+            }
+          });
+      })
+      .catch((err) => {
+        app.debug("submitDataToServer failed:", err);
+      });
   }
 
   function getKeyValue(key, maxAge) {
