@@ -12,8 +12,7 @@
   "author": "Francois Lacroix <xbgmsharp@gmail.com>",
   "license": "Apache-2.0",
   "dependencies": {
-    "axios": "^1.9.0",
-    "better-sqlite3": "^12.0.0"
+    "axios": "^1.9.0"
   },
   "repository": {
     "type": "git",
