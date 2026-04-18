@@ -60,10 +60,12 @@ https://github.com/xbgmsharp/signalk-postgsail/assets/1498985/b2669c39-11ad-4a50
 - Windy PWS (Personal Weather Station).
 - Engine Hours Logger.
 - Polar performance.
+- AI agent - Model Context Protocol (MCP) to answer natural language queries about your vessel in your language.
+- I18n support - Available in English, French, Spanish, German, Portugues
 - Anything missing? just ask!
 
 ## Optional dependencies
-[signalk-autostate](https://www.npmjs.com/package/@meri-imperiumi/signalk-autostate) by @meri-imperiumi. Used to determine the vessel's state based on sensor values, and updates the `navigation.state` value accordingly.
+[signalk-autostate](https://github.com/meri-imperiumi/signalk-autostate) by @meri-imperiumi. Used to determine the vessel's state based on sensor values, and updates the `navigation.state` value accordingly.
 
 The [signalk-derived-data](https://github.com/SignalK/signalk-derived-data) and [signalk-path-mapper](https://github.com/sbender9/signalk-path-mapper) plugins are both useful to remap available data to the required canonical paths.
 
