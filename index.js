@@ -1,6 +1,6 @@
 /*
  * Copyright 2019-2021 Ilker Temir <ilker@ilkertemir.com>
- * Copyright 2021-2025 Francois Lacroix <xbgmsharp@gmail.com>
+ * Copyright 2021-2026 Francois Lacroix <xbgmsharp@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,10 +29,7 @@ const BUFFER_LIMIT = 31; // Submit only X buffer entries at a time Prod
 
 const fs = require("fs");
 const filePath = require("path");
-const axios = require("axios");
-const Database = require("better-sqlite3");
-const zlib = require("zlib");
-const https = require("https");
+const { DatabaseSync } = require("node:sqlite");
 const mypackage = require("./package.json");
 
 module.exports = function (app) {
@@ -104,20 +101,13 @@ module.exports = function (app) {
     gpsSource = options.source;
     app.debug(`host ${options.host}, token:${options.token}`);
 
-    API = axios.create({
-      baseURL: options.host,
-      timeout: 50000,
-      headers: {
-        Authorization: `Bearer ${options.token}`,
-        "User-Agent": `postgsail.signalk v${metadata.plugin_version}`,
-      },
-      httpsAgent: new https.Agent({ KeepAlive: true }),
-    });
+    // Create the API client ONCE with the configuration
+    API = createAPIClient(options.host, options.token, metadata);
     getConfiguration();
     sendMetadata();
 
     let dbFile = filePath.join(app.getDataDirPath(), "postgsail.sqlite3");
-    db = new Database(dbFile);
+    db = new DatabaseSync(dbFile);
     // Create the table if it doesn't exist
     db.prepare(
       `
@@ -325,26 +315,19 @@ module.exports = function (app) {
     }
     app.debug("Retrieving monitoring configuration", url);
     API.get(url)
-      .then(function (response) {
-        //console.log(response);
-        //app.debug(response);
-        if (
-          response &&
-          response.status == 200 &&
-          Array.isArray(response.data) &&
-          response.data.length > 0
-        ) {
+      .then(async (data) => {
+        if (Array.isArray(data) && data.length > 0) {
           app.debug("Successfully retrieved monitoring configuration");
           app.debug(
             "Server monitoring configuration",
-            response.data[0].configuration
+            data[0].configuration
           );
           app.debug("Local current configuration", configuration);
-          if (typeof response.data[0].configuration !== "object") {
+          if (typeof data[0].configuration !== "object") {
             app.debug("Invalid monitoring configuration, ignore");
             return;
           }
-          configuration["monitoring"] = response.data[0].configuration;
+          configuration["monitoring"] = data[0].configuration;
           saveConfiguration();
           retrieveMonitoringConfigInProgress = false;
         }
@@ -399,19 +382,15 @@ module.exports = function (app) {
     app.debug("Sending metadata to the server: ", metadata);
     API.post("/metadata?on_conflict=vessel_id", metadata, {
       headers: {
-        Prefer:
-          "missing=default,return=headers-only,resolution=merge-duplicates",
-      },
+        Prefer: "missing=default,return=headers-only,resolution=merge-duplicates"
+      }
     })
-      .then(function (response) {
-        //console.log(response);
-        if (response && (response.status == 201 || response.status == 200)) {
-          app.debug("Successfully sent metadata to the server");
-          //app.debug(response);
-          lastSuccessfulUpdate = Date.now();
-          submitDataToServer();
-          getConfiguration(true);
-        }
+      .then((data) => {
+        // No data is returned when the record is updated, only when it's created for the first time
+        app.debug("Successfully sent metadata to the server");
+        lastSuccessfulUpdate = Date.now();
+        submitDataToServer();
+        getConfiguration(true);
       })
       .catch(function (error) {
         app.debug("Metadata submission to the server failed");
@@ -494,7 +473,7 @@ module.exports = function (app) {
       const stmt = db.prepare(
         "INSERT INTO buffer VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       );
-      stmt.run(values);
+      stmt.run(...values);
       windSpeedApparent = 0;
       maxSpeedOverGround = 0;
     } catch (err) {
@@ -531,65 +510,66 @@ module.exports = function (app) {
       }
 
       app.debug("DEBUG: metrics lastTime:" + data[data.length - 1].time);
-
       API.post("/metrics?select=time", data, {
         headers: {
           Prefer: "return=representation",
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
       })
-        .then(function (response) {
-          if (response && response.status === 201 && response.data) {
-            app.debug(response.data);
-            let lastTs = null;
+        .then(async (responseData) => {
+          app.debug(responseData);
+          if (!responseData) {
+            throw new Error(`HTTP Metrics submission to the server failed ${responseData}`);
+          }
+          app.debug(responseData);
+          let lastTs = null;
 
-            if (response.data.length > 0) {
-              lastTs = new Date(
-                response.data[response.data.length - 1].time
-              ).toISOString();
-              app.debug(`Response metrics lastTime <=${lastTs}`);
-            }
+          if (responseData.length > 0) {
+            lastTs = new Date(
+              responseData[responseData.length - 1].time
+            ).toISOString();
+            app.debug(`Response metrics lastTime <=${lastTs}`);
+          }
 
-            if (response.data.length !== data.length) {
-              app.debug(
-                `Ignored metrics from buffer, sent:${data.length}, got:${response.data.length}`
-              );
-              lastTs = data[data.length - 1].time;
-            }
-
+          if (responseData.length !== data.length) {
             app.debug(
-              `Successfully sent ${data.length} record(s) to the server`
+              `Ignored metrics from buffer, sent:${data.length}, got:${responseData.length}`
             );
-            app.debug(`Removing from buffer <=${lastTs}`);
+            lastTs = data[data.length - 1].time;
+          }
 
-            try {
-              const deleteStmt = db.prepare(
-                "DELETE FROM buffer WHERE time <= ?"
+          app.debug(
+            `Successfully sent ${data.length} record(s) to the server`
+          );
+          app.debug(`Removing from buffer <=${lastTs}`);
+
+          try {
+            const deleteStmt = db.prepare(
+              "DELETE FROM buffer WHERE time <= ?"
+            );
+            const result = deleteStmt.run(lastTs);
+            app.debug(`Buffer row(s) deleted: ${result.changes}`);
+
+            if (result.changes > 0) {
+              app.debug(
+                `Deleted metrics from buffer, req:${data.length}, got:${result.changes}`
               );
-              const result = deleteStmt.run(lastTs);
-              app.debug(`Buffer row(s) deleted: ${result.changes}`);
+              lastSuccessfulUpdate = Date.now();
 
-              if (result.changes > 0) {
+              setTimeout(function () {
                 app.debug(
-                  `Deleted metrics from buffer, req:${data.length}, got:${result.changes}`
+                  "setTimeout, SubmitDataToServer, submitting next metrics batch"
                 );
-                lastSuccessfulUpdate = Date.now();
-
-                setTimeout(function () {
-                  app.debug(
-                    "setTimeout, SubmitDataToServer, submitting next metrics batch"
-                  );
-                  submitDataToServer();
-                }, 19 * 1000);
-              } else {
-                app.debug(`No operations runned on metrics from buffer: 0`);
-                console.log(
-                  "signalk-postgsail - warning removing metrics from buffer"
-                );
-              }
-            } catch (err) {
-              app.debug(`Failed to delete metrics from buffer`);
+                submitDataToServer();
+              }, 19 * 1000);
+            } else {
+              app.debug(`No operations runned on metrics from buffer: 0`);
+              console.log(
+                "signalk-postgsail - warning removing metrics from buffer"
+              );
             }
+          } catch (err) {
+            app.debug(`Failed to delete metrics from buffer`);
           }
         })
         .catch(function (error) {
@@ -800,10 +780,9 @@ module.exports = function (app) {
           if (timeBetweenPositions <= 2 * 60 * 1000 && distance >= 5) {
             app.error(
               `Erroneous position reading. ` +
-                `Moved ${distance} miles in ${
-                  timeBetweenPositions / 1000
-                } seconds. ` +
-                `Ignoring the position: ${position.latitude}, ${position.longitude}`
+              `Moved ${distance} miles in ${timeBetweenPositions / 1000
+              } seconds. ` +
+              `Ignoring the position: ${position.latitude}, ${position.longitude}`
             );
             break;
           }
@@ -1033,6 +1012,53 @@ module.exports = function (app) {
     }
 
     return data;
+  }
+
+  function createAPIClient(baseURL, token, metadata) {
+    async function apiRequest(endpoint, options = {}) {
+      const url = new URL(endpoint, baseURL).href;
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(options.timeout || 50000),
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'User-Agent': `postgsail.signalk v${metadata.plugin_version}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...options.headers
+          },
+          body: options.body ? JSON.stringify(options.body) : undefined
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP "${endpoint}" ${response.status}: ${response.statusText} ${await response.text()}`);
+        }
+        const contentLength = response.headers.get('content-length');
+        const contentType = response.headers.get('content-type');
+        app.debug(`HTTP "${endpoint}" ${response.status}: ${response.statusText} contentType ${contentType} contentLength ${contentLength}`);
+        if (contentType === null && contentLength === '0') {
+          return null;
+        }
+        return response.json();
+      } catch (error) {
+        /*
+        console.error('Fetch failed for:', url);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error cause:', error.cause);
+        */
+        app.error(`HTTP request failed for "${url}": ${error.cause}`);
+        throw error;
+      }
+    }
+
+    return {
+      get: (url, opts) => apiRequest(url, { ...opts, method: 'GET' }),
+      post: (url, body, opts) => apiRequest(url, { ...opts, method: 'POST', body }),
+      put: (url, body, opts) => apiRequest(url, { ...opts, method: 'PUT', body }),
+      delete: (url, opts) => apiRequest(url, { ...opts, method: 'DELETE' })
+    };
   }
 
   return plugin;
