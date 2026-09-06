@@ -50,6 +50,8 @@ module.exports = function (app) {
   var speedOverGround;
   var maxSpeedOverGround;
   var courseOverGroundTrue;
+  var maxSpeedOverGround = 0;
+  var courseOverGroundTrue = 0;
   var windSpeedApparent = 0;
   var angleSpeedApparent = 0;
   var previousSpeeds = [];
@@ -936,7 +938,7 @@ module.exports = function (app) {
           metrics[path] = value;
           break;
         }
-        const isUnusedPath = path.match(/(MAIANA|forecast|sunlight|moon|observations)/i);
+        const isUnusedPath = path.match(/(MAIANA|forecast|sunlight|moon|observations|gnss|course|courseGreatCircle|courseRhumbline|design|entertainment)/i);
         if (isUnusedPath) {
           app.debug(
             `Skipping path '${path}' because value is unused, '${isUnusedPath}'`
